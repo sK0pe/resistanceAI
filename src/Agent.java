@@ -1,5 +1,5 @@
 /**
- * A Java interface for an agent to play in Resistance.
+ * A Java interface for an agent to play in Resistance. WOW
  * Each agent is given a single capital letter, which will be their name for the game.
  * The game actions will be encoded using strings.
  * The agent will be created entirely in a single game, and the agent must maintain its own state.
