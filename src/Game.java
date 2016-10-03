@@ -33,8 +33,8 @@ public class Game{
 
   /**
    * Creates an empty game
-   * @param logFile path to the log file
-   * */
+   * @param fName path to the log file
+   **/
   public Game(String fName){
     logFile = new File(fName);
     logging = true;
@@ -104,7 +104,7 @@ public class Game{
       for(Character c: spies){spyString+=c; resString+='?';}
       statusUpdate(1,0);
       started= true;
-      log("Game set up. Spys allocated");
+      log("Game set up. Spies allocated");
     }
   }
 
@@ -244,7 +244,7 @@ public class Game{
       }
       else log("Mission succeeded");
       statusUpdate(round+1, fails);
-      HashMap<Character,String> accusations = new HashMap<Character, String>();
+      HashMap<Character,String> accusations = new HashMap<>();
       for(Character c: players.keySet()){
         stopwatchOn();
         accusations.put(c,players.get(c).do_Accuse());
@@ -270,7 +270,7 @@ public class Game{
    **/
   public static void main(String[] args){
     Game g = new Game();
-    g.stopwatchOn();g.addPlayer(new RandomAgent());g.stopwatchOff(1000,'A');
+    g.stopwatchOn();g.addPlayer(new RandomAgent());g.stopwatchOff(600000,'A');
     g.stopwatchOn();g.addPlayer(new RandomAgent());g.stopwatchOff(1000,'B');
     g.stopwatchOn();g.addPlayer(new RandomAgent());g.stopwatchOff(1000,'C');
     g.stopwatchOn();g.addPlayer(new RandomAgent());g.stopwatchOff(1000,'D');
@@ -279,15 +279,3 @@ public class Game{
     g.play();
   }
 }  
-        
-        
-        
-
-
-
-
-
-
-
-
-

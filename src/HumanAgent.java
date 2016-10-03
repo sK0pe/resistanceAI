@@ -13,7 +13,6 @@ import java.io.*;
 
 
 public class HumanAgent implements Agent{
-
   private Scanner scanner;
   private String players = "";
   private String spies = "";
@@ -24,8 +23,8 @@ public class HumanAgent implements Agent{
   public HumanAgent(){
     this.out = System.out;
     scanner = new Scanner(System.in);
-  }  
-  
+  }
+
   private String getInput(){
     String s = scanner.nextLine();
     return s;
@@ -39,7 +38,7 @@ public class HumanAgent implements Agent{
    * Reports the current status, inlcuding players name, the name of all players, the names of the spies (if known), the mission number and the number of failed missions
    * @param name a string consisting of a single letter, the agent's names.
    * @param players a string consisting of one letter for everyone in the game.
-   * @param spies a String consisting of the latter name of each spy, if the agent is a spy, or n questions marks where n is the number of spies allocated; this should be sufficient for the agent to determine if they are a spy or not. 
+   * @param spies a String consisting of the latter name of each spy, if the agent is a spy, or n questions marks where n is the number of spies allocated; this should be sufficient for the agent to determine if they are a spy or not.
    * @param mission the next mission to be launched
    * @param failures the number of failed missions
    * */
@@ -48,16 +47,16 @@ public class HumanAgent implements Agent{
     this.players = players;
     this.spies = spies;
     if(spies.indexOf(name)!=-1) spy = true;
-    write("You are: "+name); 
-    write("The players in the game are: "+players); 
-    write("The Spies are: "+spies); 
+    write("You are: "+name);
+    write("The players in the game are: "+players);
+    write("The Spies are: "+spies);
     write("The next mission is: "+mission);
     write("So far, "+failures+" missions have failed");
   }
-  
+
   /**
    * Nominates a group of agents to go on a mission.
-   * If the String does not correspond to a legitimate mission (<i>number</i> of distinct agents, in a String), 
+   * If the String does not correspond to a legitimate mission (<i>number</i> of distinct agents, in a String),
    * a default nomination of the first <i>number</i> agents (in alphabetical order) will be reported, as if this was what the agent nominated.
    * @param number the number of agents to be sent on the mission
    * @return a String containing the names of all the agents in a mission
@@ -70,10 +69,10 @@ public class HumanAgent implements Agent{
   /**
    * Provides information of a given mission.
    * @param leader the leader who proposed the mission
-   * @param mission a String containing the names of all the agents in the mission 
+   * @param mission a String containing the names of all the agents in the mission
    **/
   public void get_ProposedMission(String leader, String mission){
-    write(leader+" proposed the mission: "+mission); 
+    write(leader+" proposed the mission: "+mission);
   }
 
   /**
@@ -83,11 +82,11 @@ public class HumanAgent implements Agent{
   public boolean do_Vote(){
     String in = "";
     while(!in.equals("Y")&&!in.equals("N")){
-        write("Do you approve of the mission [Y/N]:");
-        in = getInput();
-     }
-     return in.equals("Y");
-   }  
+      write("Do you approve of the mission [Y/N]:");
+      in = getInput();
+    }
+    return in.equals("Y");
+  }
 
   /**
    * Reports the votes for the previous mission
@@ -111,14 +110,17 @@ public class HumanAgent implements Agent{
    * @return true if agent betrays, false otherwise
    **/
   public boolean do_Betray(){
-    if(!spy){write("You are on the mission"); return false;}
+    if(!spy){
+      write("You are on the mission");
+      return false;
+    }
     String in = "";
     while(!in.equals("Y")&&!in.equals("N")){
-        write("You are on the mission. Do you betray the mission? [Y/N]:");
-        in = getInput();
-     }
-     return in.equals("Y");
-   }  
+      write("You are on the mission. Do you betray the mission? [Y/N]:");
+      in = getInput();
+    }
+    return in.equals("Y");
+  }
 
   /**
    * Reports the number of people who betrayed the mission
@@ -130,11 +132,11 @@ public class HumanAgent implements Agent{
 
 
   /**
-   * Optional method to accuse other Agents of being spies. 
-   * Default action should return the empty String. 
+   * Optional method to accuse other Agents of being spies.
+   * Default action should return the empty String.
    * Convention suggests that this method only return a non-empty string when the accuser is sure that the accused is a spy.
    * Of course convention can be ignored.
-   * @return a string containing the name of each accused agent. 
+   * @return a string containing the name of each accused agent.
    * */
   public String do_Accuse(){
     write("Who are the spies?");
@@ -149,5 +151,4 @@ public class HumanAgent implements Agent{
   public void get_Accusation(String accuser, String accused){
     write(accuser+" accused "+(accused.equals("")?"no one":accused)+" of being "+(accused.length()==1?"a spy.":"spies."));
   }
-
 }
