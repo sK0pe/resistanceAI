@@ -8,19 +8,72 @@ public class HeuristicAgent implements Agent{
     private String name;
     private String players = "";
     private String spies = "";
+    // Am I a spy?
     private boolean spy;
+    // How to write out in Java without being overly verbose
     private PrintStream display;
+    // Suspicion container
+    private HashMap<String, Double> suspicion = new HashMap<String, Double>();
+    // N Choose K (N!/(K! * (N-K)!) preprocessor
+    //private int suspicionSize[] = {10, 15, 35, 56, 84, 210};
+    private int suspicionDiscountSelf[] = {6, 10, 20, 35, 56, 126};
 
+    // Printing out
     public HeuristicAgent(){
         this.display = System.out;
     }
-
     private void write(String s){
         display.println(s);
     }
 
+
     /**
-     * Reports the current status, inlcuding players name, the name of all players, the names of the spies (if known), the mission number and the number of failed missions
+     * become_suspicious
+     *
+     * Helper function for get_status
+     * Initialises the suspicion container based on player size
+     */
+    private void become_suspicious(HashMap<String, Double> suspicion, String players){
+        int numPlayers = players.length();
+        StringBuilder spyCombo = new StringBuilder();
+        for(int i = 0; i < numPlayers; ++i){
+            for(int j = i+1; j < numPlayers; ++j){
+                // 5 or 6 player game 2 spies
+                if(numPlayers < 7){
+                    spyCombo.setLength(0);
+                    spyCombo.append(players.charAt(i));
+                    spyCombo.append(players.charAt(j));
+                    suspicion.put(spyCombo.toString(), 0.0);
+                }
+                else{
+                    for(int k = j + 1; k < numPlayers; ++k){
+                        // 7, 8 or 9 player game 3 spies
+                        if(numPlayers < 10){
+                            spyCombo.setLength(0);
+                            spyCombo.append(players.charAt(i));
+                            spyCombo.append(players.charAt(j));
+                            spyCombo.append(players.charAt(k));
+                            suspicion.put(spyCombo.toString(), 0.0);
+                        }
+                        else{
+                            // 10 player game, 4 spies
+                            for(int l = k + 1; l < numPlayers; ++l){
+                                spyCombo.setLength(0);
+                                spyCombo.append(players.charAt(i));
+                                spyCombo.append(players.charAt(j));
+                                spyCombo.append(players.charAt(k));
+                                spyCombo.append(players.charAt(l));
+                                suspicion.put(spyCombo.toString(), 0.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Reports the current status, including players name, the name of all players, the names of the spies (if known), the mission number and the number of failed missions
      *
      * @param name     a string consisting of a single letter, the agent's names.
      * @param players  a string consisting of one letter for everyone in the game.
@@ -30,14 +83,21 @@ public class HeuristicAgent implements Agent{
      * @return within 100ms
      */
     @Override
-    public void get_status(String name, String players, String spies, int mission, int failures) {
-        this.name = name;
-        // Player string provided from Game
-        this.players = players;
-        // Spy string provided from Game
-        this.spies = spies;
-        // If spy string contains my name, I'm a spy
-        spy = spies.contains(name);
+    public void get_status(String name, String players, String spies, int mission, int failures){
+        // Initialise
+        if(mission == 1){
+            this.name = name;
+            // Player string provided from Game
+            this.players = players;
+            // Spy string provided from Game
+            this.spies = spies;
+            // If spy string contains my name, I'm a spy
+            spy = spies.contains(name);
+            // Initialise Suspicion
+            become_suspicious(suspicion, players);
+
+
+        }
         // Test data to track.
         write("Harry is playing in a " + players.length() + "game");
         write("Harry's character name is " + name);
