@@ -8,6 +8,7 @@ public class HeuristicAgent implements Agent{
     private String name;
     private String players = "";
     private String spies = "";
+    private int numPlayers;
     // Am I a spy?
     private boolean spy;
     // Missions failed up till current update
@@ -18,7 +19,7 @@ public class HeuristicAgent implements Agent{
     // How to write out in Java without being overly verbose
     private PrintStream display;
     // Suspicion container
-    private HashMap<String, Double> suspicion = new HashMap<String, Double>();
+    private TreeMap<String, Double> suspicion = new TreeMap<String, Double>();
     // N Choose K (N!/(K! * (N-K)!) preprocessor
     //private int suspicionSize[] = {10, 15, 35, 56, 84, 210};
     private int suspicionDiscountSelf[] = {6, 10, 20, 35, 56, 126};
@@ -38,9 +39,10 @@ public class HeuristicAgent implements Agent{
      * Helper function for get_status
      * Initialises the suspicion container based on player size
      */
-    private void become_suspicious(HashMap<String, Double> suspicion, String players){
-        int numPlayers = players.length();
+    private void become_suspicious(TreeMap<String, Double> suspicion, String players){
         //Sort the players string as not guaranteed
+        char playerArr[] = players.toLowerCase().toCharArray();
+        Arrays.sort(playerArr);
 
         StringBuilder spyCombo = new StringBuilder();
         for(int i = 0; i < numPlayers; ++i){
@@ -48,8 +50,7 @@ public class HeuristicAgent implements Agent{
                 // 5 or 6 player game 2 spies
                 if(numPlayers < 7){
                     spyCombo.setLength(0);
-                    spyCombo.append(players.charAt(i));
-                    spyCombo.append(players.charAt(j));
+                    spyCombo.append(playerArr[i]).append(playerArr[j]);
                     suspicion.put(spyCombo.toString(), 0.0);
                 }
                 else{
@@ -57,19 +58,14 @@ public class HeuristicAgent implements Agent{
                         // 7, 8 or 9 player game 3 spies
                         if(numPlayers < 10){
                             spyCombo.setLength(0);
-                            spyCombo.append(players.charAt(i));
-                            spyCombo.append(players.charAt(j));
-                            spyCombo.append(players.charAt(k));
+                            spyCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]);
                             suspicion.put(spyCombo.toString(), 0.0);
                         }
                         else{
                             // 10 player game, 4 spies
                             for(int l = k + 1; l < numPlayers; ++l){
                                 spyCombo.setLength(0);
-                                spyCombo.append(players.charAt(i));
-                                spyCombo.append(players.charAt(j));
-                                spyCombo.append(players.charAt(k));
-                                spyCombo.append(players.charAt(l));
+                                spyCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]).append(playerArr[l]);
                                 suspicion.put(spyCombo.toString(), 0.0);
                             }
                         }
@@ -96,6 +92,7 @@ public class HeuristicAgent implements Agent{
             this.name = name;
             // Player string provided from Game
             this.players = players;
+            this.numPlayers = players.length();
             // Spy string provided from Game
             this.spies = spies;
             // If spy string contains my name, I'm a spy
@@ -108,16 +105,12 @@ public class HeuristicAgent implements Agent{
         this.mission = mission;
 
         // Check if last mission has failed or not
-        if(failures > failedMissions){
-            lastMissionFailed = true;
-        }
-        else{
-            lastMissionFailed = false;
-        }
+        lastMissionFailed = failures > failedMissions;
+        // Update failed missions
         failedMissions = failures;
 
         // Test data to track.
-        write("Harry is playing in a " + players.length() + "game");
+        write("Harry is playing in a " + numPlayers + "game");
         write("Harry's character name is " + name);
         write("Players in this game are " + players);
         if(spy){
@@ -132,7 +125,7 @@ public class HeuristicAgent implements Agent{
             write("The last mission failed!");
         }
         else{
-            write("The last mission did not fail.")
+            write("The last mission did not fail.");
         }
     }
 
@@ -146,14 +139,41 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public String do_Nominate(int number) {
+        StringBuilder nominatedPlayers = new StringBuilder();
+        int leader = players.indexOf(name);
         // Resistance Behaviour
         if(!spy){
-            // If round 1 leader, choose the player to my right
-            if(currMission == 1){
-                int leader = players.indexOf(name);
-                StringBuil
+            // If round 1 leader, choose the player to my right in hope to setup 3 in a row
+            if(mission == 1){
+                nominatedPlayers.append(name).append(players.charAt((leader + numPlayers - 1)%numPlayers));
             }
+            else{
+                TreeMap<Double, String> lowSuspicionTeam = new TreeMap<>();
+                Double teamSuspicion;
+                // For each spy combination
+                for(String spyCombo : suspicion.keySet()){
+                    teamSuspicion = 0.0;
+                    for(String innerSpyCombo : suspicion.keySet()){
+                        // Check if player from spyCombo resides withing innerSpyCombo
+                        for(char c : spyCombo.toCharArray()){
+                            // If resides in both, add suspicion, and move onto next innerSpyCombo
+                            if(innerSpyCombo.contains(Character.toString(c))){
+                                teamSuspicion += suspicion.get(innerSpyCombo);
+                                break;
+                            }
+                        }
+                    }
+                    lowSuspicionTeam.put(teamSuspicion, spyCombo);
+                }
+            }
+
+            // Nominate players from least suspicious to most suspicious
+            nominatedPlayers.append(name)
         }
+        else{
+            // Government Behaviour
+        }
+        return nominatedPlayers.toString();
     }
 
     /**
@@ -163,9 +183,7 @@ public class HeuristicAgent implements Agent{
      * @param mission a String containing the names of all the agents in the mission within 1sec
      **/
     @Override
-    public void get_ProposedMission(String leader, String mission) {
-
-    }this
+    public void get_ProposedMission(String leader, String mission) {}
 
     /**
      * Gets an agents vote on the last reported mission
