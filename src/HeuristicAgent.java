@@ -10,6 +10,11 @@ public class HeuristicAgent implements Agent{
     private String spies = "";
     // Am I a spy?
     private boolean spy;
+    // Missions failed up till current update
+    int failedMissions = 0;
+    // What mission am I playing?
+    int mission = 0;
+    boolean lastMissionFailed = false;
     // How to write out in Java without being overly verbose
     private PrintStream display;
     // Suspicion container
@@ -35,6 +40,8 @@ public class HeuristicAgent implements Agent{
      */
     private void become_suspicious(HashMap<String, Double> suspicion, String players){
         int numPlayers = players.length();
+        //Sort the players string as not guaranteed
+
         StringBuilder spyCombo = new StringBuilder();
         for(int i = 0; i < numPlayers; ++i){
             for(int j = i+1; j < numPlayers; ++j){
@@ -85,19 +92,30 @@ public class HeuristicAgent implements Agent{
     @Override
     public void get_status(String name, String players, String spies, int mission, int failures){
         // Initialise
-        if(mission == 1){
+        if(mission == 1) {
             this.name = name;
             // Player string provided from Game
             this.players = players;
             // Spy string provided from Game
             this.spies = spies;
             // If spy string contains my name, I'm a spy
-            spy = spies.contains(name);
+            this.spy = spies.contains(name);
             // Initialise Suspicion
             become_suspicious(suspicion, players);
-
-
         }
+
+        // Update mission number
+        this.mission = mission;
+
+        // Check if last mission has failed or not
+        if(failures > failedMissions){
+            lastMissionFailed = true;
+        }
+        else{
+            lastMissionFailed = false;
+        }
+        failedMissions = failures;
+
         // Test data to track.
         write("Harry is playing in a " + players.length() + "game");
         write("Harry's character name is " + name);
@@ -110,6 +128,12 @@ public class HeuristicAgent implements Agent{
         }
         write("The upcoming mission is " + mission);
         write("So far " + failures + " missions have been failed");
+        if(lastMissionFailed){
+            write("The last mission failed!");
+        }
+        else{
+            write("The last mission did not fail.")
+        }
     }
 
     /**
@@ -122,7 +146,14 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public String do_Nominate(int number) {
-        return null;
+        // Resistance Behaviour
+        if(!spy){
+            // If round 1 leader, choose the player to my right
+            if(currMission == 1){
+                int leader = players.indexOf(name);
+                StringBuil
+            }
+        }
     }
 
     /**
@@ -134,7 +165,7 @@ public class HeuristicAgent implements Agent{
     @Override
     public void get_ProposedMission(String leader, String mission) {
 
-    }
+    }this
 
     /**
      * Gets an agents vote on the last reported mission

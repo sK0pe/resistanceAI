@@ -15,7 +15,7 @@ public class Game{
   private int numPlayers = 0;
   private static final int[] spyNum = {2,2,3,3,3,4}; //spyNum[n-5] is the number of spies in an n player game
   private static final int[][] missionNum = {{2,3,2,3,3},{2,3,4,3,4},{2,3,3,4,4},{3,4,4,5,5},{3,4,4,5,5},{3,4,4,5,5}};
-                                    //missionNum[n-5][i] is the number to send on mission i in a  in an n player game
+  //missionNum[n-5][i] is the number to send on mission i in a  in an n player game
   private Random rand;
   private File logFile;
   private boolean logging = false;
@@ -33,8 +33,8 @@ public class Game{
 
   /**
    * Creates an empty game
-   * @param fName path to the log file
-   **/
+   * @param logFile path to the log file
+   * */
   public Game(String fName){
     logFile = new File(fName);
     logging = true;
@@ -68,7 +68,7 @@ public class Game{
     else{
       System.out.println(msg);
     }
-  }  
+  }
 
 
   /**
@@ -104,11 +104,11 @@ public class Game{
       for(Character c: spies){spyString+=c; resString+='?';}
       statusUpdate(1,0);
       started= true;
-      log("Game set up. Spies allocated");
+      log("Game set up. Spys allocated");
     }
   }
 
-  /** 
+  /**
    * Starts a timer for Agent method calls
    * */
   private void stopwatchOn(){
@@ -137,7 +137,7 @@ public class Game{
       if(spies.contains(c)){
         stopwatchOn(); players.get(c).get_status(""+c,playerString,spyString,round,fails); stopwatchOff(100,c);
       }
-      else{ 
+      else{
         stopwatchOn(); players.get(c).get_status(""+c,playerString,resString,round,fails); stopwatchOff(100,c);
       }
     }
@@ -149,8 +149,7 @@ public class Game{
    * @param round the round in the game the mission is for.
    * @return a String containing the names of the agents being sent on the mission
    * */
-  private String nominate(int round){
-    Character leader = (char)(rand.nextInt(numPlayers)+65);
+  private String nominate(int round, Character leader){
     int mNum = missionNum[numPlayers-5][round-1];
     stopwatchOn(); String team = players.get(leader).do_Nominate(mNum); stopwatchOff(1000,leader);
     char[] tA = team.toCharArray();
@@ -177,14 +176,14 @@ public class Game{
    * @return true if a strict majority supported the mission.
    * */
   private boolean vote(){
-   int votes = 0;
-   String yays = "";
-   for(Character c: players.keySet()){
-      stopwatchOn(); 
+    int votes = 0;
+    String yays = "";
+    for(Character c: players.keySet()){
+      stopwatchOn();
       if(players.get(c).do_Vote()){
         votes++;
         yays+=c;
-       }
+      }
       stopwatchOff(1000,c);
     }
     for(Character c: players.keySet()){
@@ -193,12 +192,12 @@ public class Game{
       stopwatchOff(100,c);
     }
     log(votes+" votes for: "+yays);
-    return (votes>numPlayers/2);  
+    return (votes>numPlayers/2);
   }
 
   /**
    * Polls the mission team on whether they betray or not, and reports the result.
-   * First it informs all players of the team being sent on the mission. 
+   * First it informs all players of the team being sent on the mission.
    * Then polls each agent who goes on the mission on whether or not they betray the mission.
    * It reports to each agent the number of betrayals.
    * @param team A string with one character for each member of the team.
@@ -222,7 +221,7 @@ public class Game{
       stopwatchOff(100,c);
     }
     log(traitors +(traitors==1?" spy ":" spies ")+ "betrayed the mission");
-    return traitors;  
+    return traitors;
   }
 
   /**
@@ -231,11 +230,13 @@ public class Game{
    * */
   public void play(){
     int fails = 0;
+    int leader = (rand.nextInt(numPlayers));
     for(int round = 1; round<=5; round++){
-      String team = nominate(round);
+      String team = nominate(round, playerString.charAt(leader++%numPlayers));
+      leader%=numPlayers;
       int voteRnd = 0;
       while(voteRnd++<5 && !vote())
-        team = nominate(round);
+        team = nominate(round, playerString.charAt(leader++%numPlayers));
       log(team+" elected");
       int traitors = mission(team);
       if(traitors !=0 && (traitors !=1 || round !=4 || numPlayers<7)){
@@ -244,7 +245,7 @@ public class Game{
       }
       else log("Mission succeeded");
       statusUpdate(round+1, fails);
-      HashMap<Character,String> accusations = new HashMap<>();
+      HashMap<Character,String> accusations = new HashMap<Character, String>();
       for(Character c: players.keySet()){
         stopwatchOn();
         accusations.put(c,players.get(c).do_Accuse());
@@ -257,13 +258,12 @@ public class Game{
           players.get(a).get_Accusation(c+"", accusations.get(c));
           stopwatchOff(100,c);
         }
-      }  
+      }
     }
     if(fails>2) log("Government Wins! "+fails+" missions failed.");
     else log("Resistance Wins! "+fails+" missions failed.");
     log("The Government Spies were "+spyString+".");
   }
-
 
   /**
    * Sets up game with random agents and plays
