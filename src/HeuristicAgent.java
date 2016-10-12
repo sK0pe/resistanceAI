@@ -129,6 +129,28 @@ public class HeuristicAgent implements Agent{
         }
     }
 
+
+
+    private String intersection(char[] team, char[] spies){
+        Arrays.sort(team);
+        Arrays.sort(spies);
+        int i = 0, j = 0;
+        StringBuilder result = new StringBuilder();
+        while(i < team.length && j < spies.length){
+            if(team[i] < spies[j]){
+                ++i;
+            }
+            else{
+                if(!(spies[j] < team[i])){
+                    result.append(team[i]);
+                    ++i;
+                }
+                ++j;
+            }
+        }
+        return result.toString();
+    }
+
     /**
      * Nominates a group of agents to go on a mission.
      * If the String does not correspond to a legitimate mission (<i>number</i> of distinct agents, in a String),
@@ -139,6 +161,15 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public String do_Nominate(int number) {
+
+        // Generate all possible teams
+        // For each possible team
+        // For each spy combo
+        // if(intersection(spyCombo, consideredTeam) >= spyRequirement)
+        // Add spyCombo's suspicion to consideredTeam
+        // Use lowest 5 suspicions
+
+        
         StringBuilder nominatedPlayers = new StringBuilder();
         int leader = players.indexOf(name);
         // Resistance Behaviour
@@ -165,13 +196,12 @@ public class HeuristicAgent implements Agent{
                     }
                     lowSuspicionTeam.put(teamSuspicion, spyCombo);
                 }
+                // Nominate players from least suspicious to most suspicious
+                nominatedPlayers.append(name)
             }
-
-            // Nominate players from least suspicious to most suspicious
-            nominatedPlayers.append(name)
         }
         else{
-            // Government Behaviour
+            // Government Spy Behaviour
         }
         return nominatedPlayers.toString();
     }
