@@ -7,8 +7,11 @@ import java.io.*;
 public class HeuristicAgent implements Agent{
     private String name;
     private String players = "";
+    private String playersExcludeSelf = "";
     private String spies = "";
     private int numPlayers;
+    private int numSpies;
+    private int nominationFailed = 0;
     // Am I a spy?
     private boolean spy;
     // Missions failed up till current update
@@ -19,10 +22,10 @@ public class HeuristicAgent implements Agent{
     // How to write out in Java without being overly verbose
     private PrintStream display;
     // Suspicion container
-    private TreeMap<String, Double> suspicion = new TreeMap<String, Double>();
-    // N Choose K (N!/(K! * (N-K)!) preprocessor
+    private ArrayList<PBlock> suspicion = new ArrayList<>();
+    private ArrayList<PBlock> missionTeams = new ArrayList<>();
     //private int suspicionSize[] = {10, 15, 35, 56, 84, 210};
-    private int suspicionDiscountSelf[] = {6, 10, 20, 35, 56, 126};
+    //private int suspicionDiscountSelf[] = {6, 10, 20, 35, 56, 126};
 
     // Printing out
     public HeuristicAgent(){
@@ -34,39 +37,57 @@ public class HeuristicAgent implements Agent{
 
 
     /**
-     * become_suspicious
+     * getPlayerCombinations
      *
-     * Helper function for get_status
-     * Initialises the suspicion container based on player size
+     * Helper function to build all combinations of players of specified
+     * size along with initialising the combination's suspicion level.
      */
-    private void become_suspicious(TreeMap<String, Double> suspicion, String players){
+    private void getPlayerCombinations(ArrayList<PBlock> suspicion, String relevantPlayers, int groupSize){
+        int nPlayers = relevantPlayers.length();
+        if(groupSize < 1 || groupSize > 5 || groupSize > nPlayers || nPlayers > numPlayers) throw new RuntimeException("Choosing " + groupSize + " players from " + relevantPlayers + " total is inappropriate");
         //Sort the players string as not guaranteed
-        char playerArr[] = players.toLowerCase().toCharArray();
+        char playerArr[] = relevantPlayers.toUpperCase().toCharArray();
         Arrays.sort(playerArr);
 
-        StringBuilder spyCombo = new StringBuilder();
-        for(int i = 0; i < numPlayers; ++i){
-            for(int j = i+1; j < numPlayers; ++j){
-                // 5 or 6 player game 2 spies
-                if(numPlayers < 7){
-                    spyCombo.setLength(0);
-                    spyCombo.append(playerArr[i]).append(playerArr[j]);
-                    suspicion.put(spyCombo.toString(), 0.0);
-                }
-                else{
-                    for(int k = j + 1; k < numPlayers; ++k){
-                        // 7, 8 or 9 player game 3 spies
-                        if(numPlayers < 10){
-                            spyCombo.setLength(0);
-                            spyCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]);
-                            suspicion.put(spyCombo.toString(), 0.0);
-                        }
-                        else{
-                            // 10 player game, 4 spies
-                            for(int l = k + 1; l < numPlayers; ++l){
-                                spyCombo.setLength(0);
-                                spyCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]).append(playerArr[l]);
-                                suspicion.put(spyCombo.toString(), 0.0);
+        StringBuilder playerCombo = new StringBuilder();
+        // Combinations are at a minimum size 2 and maximum size 5
+        for(int i = 0; i < nPlayers; ++i) {
+            // group of 1
+            if (groupSize == 1) {
+                playerCombo.setLength(0);
+                playerCombo.append(playerArr[i]);
+                suspicion.add(new PBlock(playerCombo.toString(), 0.0));
+            } else {
+                //groups >= 2
+                for (int j = i + 1; j < nPlayers; ++j) {
+                    // groups of 2
+                    if (groupSize == 2) {
+                        playerCombo.setLength(0);
+                        playerCombo.append(playerArr[i]).append(playerArr[j]);
+                        suspicion.add(new PBlock(playerCombo.toString(), 0.0));
+                    } else {
+                        // groups >= 3
+                        for (int k = j + 1; k < nPlayers; ++k) {
+                            if (groupSize == 3) {
+                                playerCombo.setLength(0);
+                                playerCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]);
+                                suspicion.add(new PBlock(playerCombo.toString(), 0.0));
+                            } else {
+                                // group >= 4
+                                for (int l = k + 1; l < nPlayers; ++l) {
+                                    if (groupSize == 4) {
+                                        playerCombo.setLength(0);
+                                        playerCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]).append(playerArr[l]);
+                                        suspicion.add(new PBlock(playerCombo.toString(), 0.0));
+                                    } else {
+                                        // group of 5
+                                        for (int m = l + 1; m < nPlayers; ++m) {
+                                            playerCombo.setLength(0);
+                                            playerCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]).append(playerArr[l]).append(playerArr[m]);
+                                            suspicion.add(new PBlock(playerCombo.toString(), 0.0));
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -93,17 +114,28 @@ public class HeuristicAgent implements Agent{
             // Player string provided from Game
             this.players = players;
             this.numPlayers = players.length();
+            // Make string of players excluding self
+            StringBuilder removeSelf = new StringBuilder(players);
+            removeSelf.deleteCharAt(removeSelf.indexOf(name));
+            this.playersExcludeSelf = removeSelf.toString();
             // Spy string provided from Game
             this.spies = spies;
+            this.numSpies = spies.length();
             // If spy string contains my name, I'm a spy
             this.spy = spies.contains(name);
-            // Initialise Suspicion
-            become_suspicious(suspicion, players);
+            // Initialise Suspicion for all possible combinations of spies
+            if(spy){
+                // As a spy, keep track of own suspicion and everyone else
+                getPlayerCombinations(suspicion, players, numSpies);
+            }
+            else {
+                // As Government agent ignore own suspicion, only interested in finding spies
+                getPlayerCombinations(suspicion, playersExcludeSelf, numSpies);
+            }
         }
 
-        // Update mission number
+        // Update mission number every round
         this.mission = mission;
-
         // Check if last mission has failed or not
         lastMissionFailed = failures > failedMissions;
         // Update failed missions
@@ -125,31 +157,41 @@ public class HeuristicAgent implements Agent{
             write("The last mission failed!");
         }
         else{
-            write("The last mission did not fail.");
+            write("The last mission succeeded.");
         }
     }
 
-
-
-    private String intersection(char[] team, char[] spies){
-        Arrays.sort(team);
-        Arrays.sort(spies);
+    /**
+     * characterIntersection
+     *
+     * Helper method for do_nominate and
+     * Finds the intersection of 2 character arrays, returning the character intersection as a string
+     * @param team      character array which being checked for an intersection with spies.
+     * @param spies     character array which represents the spies, checking if these characters exist in team, if so keep for result.
+     * @return found    String made up of character intersection between the 2 arrays
+     */
+    private int characterIntersection(String team, String spies){
+//        char team[] = teamString.toCharArray();
+//        char spies[] = spyString.toCharArray();
+//        Arrays.sort(team);
+//        Arrays.sort(spies);
         int i = 0, j = 0;
-        StringBuilder result = new StringBuilder();
-        while(i < team.length && j < spies.length){
-            if(team[i] < spies[j]){
+        StringBuilder found = new StringBuilder();
+        while(i < team.length() && j < spies.length()){
+            if(team.charAt(i) < spies.charAt(j)){
                 ++i;
             }
             else{
-                if(!(spies[j] < team[i])){
-                    result.append(team[i]);
+                if(!(spies.charAt(j) < team.charAt(i))){
+                    found.append(team.charAt(i));
                     ++i;
                 }
                 ++j;
             }
         }
-        return result.toString();
+        return found.length();
     }
+
 
     /**
      * Nominates a group of agents to go on a mission.
@@ -161,15 +203,38 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public String do_Nominate(int number) {
+        // Find all possible combinations of size "number" - 1, excluding self, assume naively that include self every single time
+        // If first round create all combinations
+        if(nominationFailed == 0){
+            // Clear previous teams from prior mission
+            if(mission > 1){
+                missionTeams.clear();
+            }
+            // First time run for this round, initalise all possible mission team combinations
+            // Check if need 2 spies to fail mission, numPlayers 7 and higher, only on mission 4
+            int minSpiesRequired = (mission == 4 && numPlayers > 6) ? 2 : 1;
+            int possibleSpies;
+            getPlayerCombinations(missionTeams, playersExcludeSelf, number-1);
+            for(PBlock consideredTeam : missionTeams){
+                for(PBlock spyCombo : suspicion){
+                    possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition);
+                    if(possibleSpies >= minSpiesRequired){
+                        // Accumulate the suspicion
+                        consideredTeam.setSuspicion(consideredTeam.suspicion + spyCombo.suspicion);
+                    }
+                }
+            }
+            // Now have informed decision of providing best possible teams to go along with me as a leader
 
-        // Generate all possible teams
-        // For each possible team
-        // For each spy combo
-        // if(intersection(spyCombo, consideredTeam) >= spyRequirement)
-        // Add spyCombo's suspicion to consideredTeam
-        // Use lowest 5 suspicions
+        }
+        else{
+            // Last team nominated failed try next least likely
+        }
 
-        
+
+
+
+
         StringBuilder nominatedPlayers = new StringBuilder();
         int leader = players.indexOf(name);
         // Resistance Behaviour
@@ -196,12 +261,13 @@ public class HeuristicAgent implements Agent{
                     }
                     lowSuspicionTeam.put(teamSuspicion, spyCombo);
                 }
-                // Nominate players from least suspicious to most suspicious
-                nominatedPlayers.append(name)
             }
+
+            // Nominate players from least suspicious to most suspicious
+            nominatedPlayers.append(name)
         }
         else{
-            // Government Spy Behaviour
+            // Government Behaviour
         }
         return nominatedPlayers.toString();
     }
@@ -292,5 +358,84 @@ public class HeuristicAgent implements Agent{
     @Override
     public void get_Accusation(String accuser, String accused) {
 
+    }
+
+
+    /**
+     * PBlock private class
+     *
+     * Holds the data of likelihood of the the group made up by the string present
+     */
+    private class PBlock implements Comparable<PBlock>{
+        private String composition;
+        private Double suspicion;
+
+        // PBLock Constructor
+        public PBlock(String composition, Double suspicion){
+            char compArray[] = composition.toCharArray();
+            Arrays.sort(compArray);
+            // Always sorted
+            this.composition = String.valueOf(compArray);
+            this.suspicion = suspicion;
+        }
+
+        // Hashing for hash structures
+        @Override
+        public int hashCode(){
+            int hashComposition = (composition != null) ? composition.hashCode() : 0;
+            int hashSuspicion = (suspicion != null) ? suspicion.hashCode() : 0;
+            return (hashComposition + hashSuspicion)*hashSuspicion + hashComposition;
+        }
+
+        // Boolean equals
+        public boolean equals(Object other){
+            if(other instanceof PBlock){
+                PBlock otherBlock = (PBlock)other;
+                // If strings are equal
+                if(this.composition != null && otherBlock.composition != null && this.composition.equals(otherBlock.composition)) {
+                    // return whether suspicion is equal
+                    return Objects.equals(this.suspicion, otherBlock.suspicion);
+                }
+            }
+            return false;
+        }
+
+        // ToString
+        public String toString(){
+            return "(" + composition + ", " + suspicion + ")";
+        }
+
+        // getters
+        public String getComposition(){
+            return composition;
+        }
+
+        public Double getSuspicion(){
+            return suspicion;
+        }
+
+        // setters
+        public void setComposition(String newComp){
+            // make sure is sorted
+            char compArray[] = newComp.toCharArray();
+            Arrays.sort(compArray);
+            composition = String.valueOf(compArray);
+        }
+
+        public void setSuspicion(Double newSuspicion){
+            suspicion = newSuspicion;
+        }
+
+
+        @Override
+        public int compareTo(PBlock o) {
+            if(this.suspicion > o.suspicion){
+                return 1;
+            }
+            else if(this.suspicion < o.suspicion){
+                return -1;
+            }
+            return this.composition.compareTo(o.composition);
+        }
     }
 }

@@ -33,7 +33,7 @@ public class Game{
 
   /**
    * Creates an empty game
-   * @param logFile path to the log file
+   * @param fName path to the log file
    * */
   public Game(String fName){
     logFile = new File(fName);
