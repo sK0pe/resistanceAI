@@ -164,7 +164,9 @@ public class Game{
       for(int i = 0; i< mNum; i++) team+=(char)(65+i);
     }
     for(Character c: players.keySet()){
-      stopwatchOn(); players.get(c).get_ProposedMission(leader+"", team); stopwatchOff(100, c);
+      stopwatchOn();
+      players.get(c).get_ProposedMission(leader+"", team);
+      stopwatchOff(100, c);
     }
     log(leader+" nominated "+team);
     return team;

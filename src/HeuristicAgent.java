@@ -8,16 +8,18 @@ public class HeuristicAgent implements Agent{
     private String name;
     private String players = "";
     private String playersExcludeSelf = "";
+    private String resistanceMembers = "";
     private String spies = "";
+    private String currLeader = "";
     private int numPlayers;
     private int numSpies;
-    private int nominationFailed = 0;
+    Double currProposedMissionTeam;
     // Am I a spy?
     private boolean spy;
     // Missions failed up till current update
     int failedMissions = 0;
     // What mission am I playing?
-    int mission = 0;
+    private int missionNum = 0;
     boolean lastMissionFailed = false;
     // How to write out in Java without being overly verbose
     private PrintStream display;
@@ -121,9 +123,19 @@ public class HeuristicAgent implements Agent{
             // Spy string provided from Game
             this.spies = spies;
             this.numSpies = spies.length();
+
             // If spy string contains my name, I'm a spy
             this.spy = spies.contains(name);
             // Initialise Suspicion for all possible combinations of spies
+            // Specify all resistance Members based on knowledge
+            for(Character s : spies.toCharArray()){
+                if(s != name.charAt(0)){
+                    removeSelf.deleteCharAt(removeSelf.indexOf(s.toString()));
+                }
+            }
+            resistanceMembers = removeSelf.toString();
+
+
             if(spy){
                 // As a spy, keep track of own suspicion and everyone else
                 getPlayerCombinations(suspicion, players, numSpies);
@@ -135,7 +147,7 @@ public class HeuristicAgent implements Agent{
         }
 
         // Update mission number every round
-        this.mission = mission;
+        this.missionNum = mission;
         // Check if last mission has failed or not
         lastMissionFailed = failures > failedMissions;
         // Update failed missions
@@ -192,6 +204,30 @@ public class HeuristicAgent implements Agent{
         return found.length();
     }
 
+    /**
+     * considerAllTeamsSuspicion
+     *
+     * Helper function to determine a possible team's suspicion level based on current probabilities
+     * @param allPossibleTeams      A container of all possible teams to consider, assumes all suspicion levels at 0.0.
+     * @param suspicionArr          A container that holds all suspicion, in most cases will be the global suspcion array.
+     *
+     *
+     */
+    private void considerAllTeamSuspicion(ArrayList<PBlock> allPossibleTeams, ArrayList<PBlock> suspicionArr){
+        // Check if need 2 spies to fail mission people playing >= 7, on mission 4
+        int minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
+        int possibleSpies;
+        for(PBlock consideredTeam : allPossibleTeams){
+            for(PBlock spyCombo : suspicionArr){
+                possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition);
+                if(possibleSpies >= minSpiesRequired){
+                    // Accumulate the suspicion
+                    consideredTeam.setSuspicion(consideredTeam.suspicion + spyCombo.suspicion);
+                }
+            }
+        }
+    }
+
 
     /**
      * Nominates a group of agents to go on a mission.
@@ -204,72 +240,27 @@ public class HeuristicAgent implements Agent{
     @Override
     public String do_Nominate(int number) {
         // Find all possible combinations of size "number" - 1, excluding self, assume naively that include self every single time
-        // If first round create all combinations
-        if(nominationFailed == 0){
-            // Clear previous teams from prior mission
-            if(mission > 1){
-                missionTeams.clear();
-            }
-            // First time run for this round, initalise all possible mission team combinations
-            // Check if need 2 spies to fail mission, numPlayers 7 and higher, only on mission 4
-            int minSpiesRequired = (mission == 4 && numPlayers > 6) ? 2 : 1;
-            int possibleSpies;
-            getPlayerCombinations(missionTeams, playersExcludeSelf, number-1);
-            for(PBlock consideredTeam : missionTeams){
-                for(PBlock spyCombo : suspicion){
-                    possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition);
-                    if(possibleSpies >= minSpiesRequired){
-                        // Accumulate the suspicion
-                        consideredTeam.setSuspicion(consideredTeam.suspicion + spyCombo.suspicion);
-                    }
-                }
-            }
-            // Now have informed decision of providing best possible teams to go along with me as a leader
-
+        // Clear previous teams from prior mission
+        if(missionNum > 1){
+            missionTeams.clear();
         }
-        else{
-            // Last team nominated failed try next least likely
-        }
-
-
-
-
-
-        StringBuilder nominatedPlayers = new StringBuilder();
-        int leader = players.indexOf(name);
-        // Resistance Behaviour
+        // Initalise all possible mission team combinations and intialise to 0 suspicion
         if(!spy){
-            // If round 1 leader, choose the player to my right in hope to setup 3 in a row
-            if(mission == 1){
-                nominatedPlayers.append(name).append(players.charAt((leader + numPlayers - 1)%numPlayers));
-            }
-            else{
-                TreeMap<Double, String> lowSuspicionTeam = new TreeMap<>();
-                Double teamSuspicion;
-                // For each spy combination
-                for(String spyCombo : suspicion.keySet()){
-                    teamSuspicion = 0.0;
-                    for(String innerSpyCombo : suspicion.keySet()){
-                        // Check if player from spyCombo resides withing innerSpyCombo
-                        for(char c : spyCombo.toCharArray()){
-                            // If resides in both, add suspicion, and move onto next innerSpyCombo
-                            if(innerSpyCombo.contains(Character.toString(c))){
-                                teamSuspicion += suspicion.get(innerSpyCombo);
-                                break;
-                            }
-                        }
-                    }
-                    lowSuspicionTeam.put(teamSuspicion, spyCombo);
-                }
-            }
-
-            // Nominate players from least suspicious to most suspicious
-            nominatedPlayers.append(name)
+            // Only trust self
+            getPlayerCombinations(missionTeams, playersExcludeSelf, number-1);
         }
         else{
-            // Government Behaviour
+            // Get all player combinations without spies to seed suspicion
+            getPlayerCombinations(missionTeams, resistanceMembers, number - 1);
         }
-        return nominatedPlayers.toString();
+        // Fill all possible mission teams with suspicion (excluding self, assume going on mission)
+        considerAllTeamSuspicion(missionTeams, suspicion);
+        // Sort all possible mission teams, based on suspicion
+        Collections.sort(missionTeams);
+        // Now have informed decision of providing best possible teams to go along with self as a leader (naive)
+        // Return least likely team to have a spy on it plus self
+        // As naive, works for Government spy and Resistance member
+        return missionTeams.get(0).composition + name;
     }
 
     /**
@@ -279,7 +270,33 @@ public class HeuristicAgent implements Agent{
      * @param mission a String containing the names of all the agents in the mission within 1sec
      **/
     @Override
-    public void get_ProposedMission(String leader, String mission) {}
+    public void get_ProposedMission(String leader, String mission) {
+        currLeader = leader;
+        if(missionNum > 1){
+            missionTeams.clear();
+        }
+        // Get all possible player combinations, consider all players, exclude self
+        getPlayerCombinations(missionTeams, players, mission.length());
+        // Populate missionTeams with suspicion to determine relevant riskiness
+        // Note that this function will not increase suspicion for a mission that I am on
+        considerAllTeamSuspicion(missionTeams, suspicion);
+        // Sort the ArrayList by suspicion
+        Collections.sort(missionTeams);
+
+
+        // Determine the proposed mission team's suspicion level
+        // Note that this function will not increase suspicion for a mission that I am on
+        int possibleSpies;
+        int minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
+        currProposedMissionTeam = 0.0;
+        for(PBlock spyCombo : suspicion){
+            possibleSpies = characterIntersection(mission, spyCombo.composition);
+            if(possibleSpies >= minSpiesRequired){
+                // Accumulate the suspicion
+                currProposedMissionTeam += spyCombo.suspicion;
+            }
+        }
+    }
 
     /**
      * Gets an agents vote on the last reported mission
@@ -304,7 +321,7 @@ public class HeuristicAgent implements Agent{
 
     /**
      * Reports the agents being sent on a mission.
-     * Should be able to be infered from tell_ProposedMission and tell_Votes, but incldued for completeness.
+     * Should be able to be inferred from tell_ProposedMission and tell_Votes, but included for completeness.
      *
      * @param mission the Agents being sent on a mission
      * @return within 100ms
