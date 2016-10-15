@@ -13,7 +13,7 @@ public class HeuristicAgent implements Agent{
     private String currLeader = "";
     private int numPlayers;
     private int numSpies;
-    Double currProposedMissionTeam;
+    private String currProposedMissionTeam;
     // Am I a spy?
     private boolean spy;
     // Missions failed up till current update
@@ -241,7 +241,7 @@ public class HeuristicAgent implements Agent{
     public String do_Nominate(int number) {
         // Find all possible combinations of size "number" - 1, excluding self, assume naively that include self every single time
         // Clear previous teams from prior mission
-        if(missionNum > 1){
+        if(!missionTeams.isEmpty()){
             missionTeams.clear();
         }
         // Initalise all possible mission team combinations and intialise to 0 suspicion
@@ -271,31 +271,23 @@ public class HeuristicAgent implements Agent{
      **/
     @Override
     public void get_ProposedMission(String leader, String mission) {
+        // With more advanced model have the mission propositions with high suspicion reflect an increase in suspicion
+        // or a small variable in suspicion for all combinations in which leader is part of, possibly somethin that learns
+        // when played against self.
         currLeader = leader;
-        if(missionNum > 1){
+        currProposedMissionTeam = mission;
+        if(!missionTeams.isEmpty()){
             missionTeams.clear();
         }
-        // Get all possible player combinations, consider all players, exclude self
+        // Resistance behaviour:
+        // Get all possible player combinations, consider players excluding self but full number,
+        // Missions with self included will have lower suspicion as I'm definitely part of the
+        // Resistance.
         getPlayerCombinations(missionTeams, players, mission.length());
-        // Populate missionTeams with suspicion to determine relevant riskiness
-        // Note that this function will not increase suspicion for a mission that I am on
+        // Populate suspicion level
         considerAllTeamSuspicion(missionTeams, suspicion);
         // Sort the ArrayList by suspicion
         Collections.sort(missionTeams);
-
-
-        // Determine the proposed mission team's suspicion level
-        // Note that this function will not increase suspicion for a mission that I am on
-        int possibleSpies;
-        int minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
-        currProposedMissionTeam = 0.0;
-        for(PBlock spyCombo : suspicion){
-            possibleSpies = characterIntersection(mission, spyCombo.composition);
-            if(possibleSpies >= minSpiesRequired){
-                // Accumulate the suspicion
-                currProposedMissionTeam += spyCombo.suspicion;
-            }
-        }
     }
 
     /**
