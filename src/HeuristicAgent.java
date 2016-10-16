@@ -11,16 +11,19 @@ public class HeuristicAgent implements Agent{
     private String resistanceMembers = "";
     private String spies = "";
     private String currLeader = "";
+    private String votedForMissionTeam = "";
+    private String votedAgainstMissionTeam = "";
+    private String electedTeam = "";
     private int numPlayers;
     private int numSpies;
-    private String currProposedMissionTeam;
+    private String currProposedTeam;
     // Am I a spy?
     private boolean spy;
     // Missions failed up till current update
-    int failedMissions = 0;
+    private int failedMissions = 0;
     // What mission am I playing?
     private int missionNum = 0;
-    boolean lastMissionFailed = false;
+    private boolean lastMissionFailed = false;
     // How to write out in Java without being overly verbose
     private PrintStream display;
     // Suspicion container
@@ -35,6 +38,22 @@ public class HeuristicAgent implements Agent{
     }
     private void write(String s){
         display.println(s);
+    }
+
+
+    /**
+     * getSortedString
+     *
+     * Helper function to sort Java strings.
+     * O(nlgn)
+     *
+     * @param unsorted      The unsorted string input.
+     * @return              A sorted String
+     */
+    private String getSortedString(String unsorted){
+        char charArray[] = unsorted.toCharArray();
+        Arrays.sort(charArray);
+        return String.valueOf(charArray);
     }
 
 
@@ -178,15 +197,14 @@ public class HeuristicAgent implements Agent{
      *
      * Helper method for do_nominate and
      * Finds the intersection of 2 character arrays, returning the character intersection as a string
-     * @param team      character array which being checked for an intersection with spies.
-     * @param spies     character array which represents the spies, checking if these characters exist in team, if so keep for result.
+     * @param teamUnsorted      String which being checked for an intersection with spies.
+     * @param spiesUnsorted     String which represents the spies, checking if these characters exist in team, if so keep for result.
      * @return found    String made up of character intersection between the 2 arrays
      */
-    private int characterIntersection(String team, String spies){
-//        char team[] = teamString.toCharArray();
-//        char spies[] = spyString.toCharArray();
-//        Arrays.sort(team);
-//        Arrays.sort(spies);
+    private int characterIntersection(String teamUnsorted, String spiesUnsorted){
+        // Will usually encounter only sorted strings but double checking for robustness
+        String team = getSortedString(spiesUnsorted);
+        String spies = getSortedString(spiesUnsorted);
         int i = 0, j = 0;
         StringBuilder found = new StringBuilder();
         while(i < team.length() && j < spies.length()){
@@ -202,6 +220,36 @@ public class HeuristicAgent implements Agent{
             }
         }
         return found.length();
+    }
+
+    /**
+     * characterRelativeComplement
+     *
+     * Helper method to determine a set of characters A - set of characters B
+     * @param baseSet       String which is being checked for relative complement
+     * @param unwantedSet      String of unwanted characters in the case that they occur in baseSet
+     * @return result       String of base set remaining after removing unwanted
+     */
+    private String characterRelativeComplement(String baseSet, String unwantedSet){
+        String base = getSortedString(baseSet);
+        String unwanted = getSortedString(unwantedSet);
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        int j = 0;
+        while(i < base.length() && j < unwanted.length()){
+            while( base.charAt(i) < unwanted.charAt(j)){
+                result.append(base.charAt(i++));
+            }
+            if(base.charAt(i) < unwanted.charAt(j)){
+                ++i;
+                ++j;
+            }
+        }
+        while(i < base.length()){
+            result.append(base.charAt(i));
+            ++i;
+        }
+        return result.toString();
     }
 
     /**
@@ -272,22 +320,26 @@ public class HeuristicAgent implements Agent{
     @Override
     public void get_ProposedMission(String leader, String mission) {
         // With more advanced model have the mission propositions with high suspicion reflect an increase in suspicion
-        // or a small variable in suspicion for all combinations in which leader is part of, possibly somethin that learns
+        // or a small variable in suspicion for all combinations in which leader is part of, possibly something that learns
         // when played against self.
         currLeader = leader;
-        currProposedMissionTeam = mission;
-        if(!missionTeams.isEmpty()){
-            missionTeams.clear();
+        currProposedTeam = getSortedString(mission);
+        // If I'm not the leader, check my suspicion for the team proposed
+        // Make sure mission is alphabetically sorted as assigning a global variable
+        if(!leader.equals(name)){
+            if(!missionTeams.isEmpty()){
+                missionTeams.clear();
+            }
+            // Resistance behaviour:
+            // Get all possible player combinations, consider players excluding self but full number,
+            // Missions with self included will have lower suspicion as I'm definitely part of the
+            // Resistance.
+            getPlayerCombinations(missionTeams, players, mission.length());
+            // Populate suspicion level
+            considerAllTeamSuspicion(missionTeams, suspicion);
+            // Sort the ArrayList by suspicion
+            Collections.sort(missionTeams);
         }
-        // Resistance behaviour:
-        // Get all possible player combinations, consider players excluding self but full number,
-        // Missions with self included will have lower suspicion as I'm definitely part of the
-        // Resistance.
-        getPlayerCombinations(missionTeams, players, mission.length());
-        // Populate suspicion level
-        considerAllTeamSuspicion(missionTeams, suspicion);
-        // Sort the ArrayList by suspicion
-        Collections.sort(missionTeams);
     }
 
     /**
@@ -297,6 +349,15 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public boolean do_Vote() {
+        // If I'm the leader I'm voting for my own mission
+        if(currLeader.equals(name)){
+            return true;
+        }
+        // If there have been 4 prior failed votes vote true regardless if Resistance as don't want to lose
+        // If there have been 4 prior failed votes and I'm a spy, I give myself away if I vote false, therefore
+        // same behaviour.
+        
+
         return false;
     }
 
@@ -308,7 +369,9 @@ public class HeuristicAgent implements Agent{
      **/
     @Override
     public void get_Votes(String yays) {
-
+        // Record those who vote for and against missions to assist in Bayesian updates
+        votedForMissionTeam = getSortedString(yays);
+        votedAgainstMissionTeam = characterRelativeComplement(players, votedForMissionTeam);
     }
 
     /**
@@ -330,7 +393,27 @@ public class HeuristicAgent implements Agent{
      **/
     @Override
     public boolean do_Betray() {
-        return false;
+        // As resistance member always want missions to succeed
+        if(!spy){
+            return false;
+        }
+        else{
+            // Government Spy behaviour
+            int spiesOnMission = characterIntersection(currProposedTeam, spies);
+            // If the mission team has only 2 people on the first mission return false to remove suspicion, may need to add a random
+            // component to this
+            // However would only be worthwhile if there was intelligence kept between games with the same agents, can't do that
+            // so best to be safe earlier in the game
+            if(currProposedTeam.length() == 2 && missionNum == 1){
+                return false;
+            }
+            // Assume other agents will vote for in case that 2 or more agents are on mission, only need more than 1
+            // vote on 4th mission in games of player size 7 and higher
+            if(!(numPlayers > 6 && missionNum == 4) && spiesOnMission > 1){
+                return false;
+            }
+            return true;
+        }
     }
 
     /**
@@ -381,10 +464,8 @@ public class HeuristicAgent implements Agent{
 
         // PBLock Constructor
         public PBlock(String composition, Double suspicion){
-            char compArray[] = composition.toCharArray();
-            Arrays.sort(compArray);
             // Always sorted
-            this.composition = String.valueOf(compArray);
+            this.composition = getSortedString(composition);
             this.suspicion = suspicion;
         }
 
@@ -425,10 +506,8 @@ public class HeuristicAgent implements Agent{
 
         // setters
         public void setComposition(String newComp){
-            // make sure is sorted
-            char compArray[] = newComp.toCharArray();
-            Arrays.sort(compArray);
-            composition = String.valueOf(compArray);
+            // make sure all inputs are sorted
+            composition = getSortedString(newComp);
         }
 
         public void setSuspicion(Double newSuspicion){
