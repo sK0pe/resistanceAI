@@ -16,9 +16,11 @@ public class HeuristicAgent implements Agent{
     private String electedTeam = "";
     private int numPlayers;
     private int numSpies;
+    private int minSpiesRequired;
     private String currProposedTeam;
     // Am I a spy?
     private boolean spy;
+    private int numProposals;
     // Missions failed up till current update
     private int failedMissions = 0;
     // What mission am I playing?
@@ -167,6 +169,11 @@ public class HeuristicAgent implements Agent{
 
         // Update mission number every round
         this.missionNum = mission;
+        // Zero the proposal fails from last mission
+        this.numProposals = 0;
+        // Determine how many spies are required to betray mission
+        // i.e. only on games of player size 7 or higher and only on mission 4
+        this.minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
         // Check if last mission has failed or not
         lastMissionFailed = failures > failedMissions;
         // Update failed missions
@@ -262,12 +269,11 @@ public class HeuristicAgent implements Agent{
      *
      */
     private void considerAllTeamSuspicion(ArrayList<PBlock> allPossibleTeams, ArrayList<PBlock> suspicionArr){
-        // Check if need 2 spies to fail mission people playing >= 7, on mission 4
-        int minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
         int possibleSpies;
         for(PBlock consideredTeam : allPossibleTeams){
             for(PBlock spyCombo : suspicionArr){
                 possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition);
+                // Check if minimum Spies present
                 if(possibleSpies >= minSpiesRequired){
                     // Accumulate the suspicion
                     consideredTeam.setSuspicion(consideredTeam.suspicion + spyCombo.suspicion);
@@ -349,6 +355,7 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public boolean do_Vote() {
+        numProposals++;
         // If I'm the leader I'm voting for my own mission
         if(currLeader.equals(name)){
             return true;
@@ -356,8 +363,24 @@ public class HeuristicAgent implements Agent{
         // If there have been 4 prior failed votes vote true regardless if Resistance as don't want to lose
         // If there have been 4 prior failed votes and I'm a spy, I give myself away if I vote false, therefore
         // same behaviour.
-        
-
+        if(numProposals == 4){
+            return true;
+        }
+        else{
+            // missionTeams has been filled by the call to get_Proposed_Mission call earlier
+            for(int m = 0; m < missionTeams.size(); ++m){
+                //  Find the relevant ranking (by suspicion) of the proposed team
+                if(missionTeams.get(m).composition.equals(currProposedTeam)){
+                    // Arrbitrary fractional cutoff instead of perfect answer, cannot determine how other agents act
+                    // Possibly train this point
+                    Double relevantRank = (double)m/(double)missionTeams.size();
+                    Double cutoff = (double)numSpies/(double)numPlayers;
+                    if( relevantRank <= cutoff){
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
@@ -383,7 +406,7 @@ public class HeuristicAgent implements Agent{
      **/
     @Override
     public void get_Mission(String mission) {
-
+        electedTeam = getSortedString(mission);
     }
 
     /**
@@ -399,17 +422,18 @@ public class HeuristicAgent implements Agent{
         }
         else{
             // Government Spy behaviour
-            int spiesOnMission = characterIntersection(currProposedTeam, spies);
+            int spiesOnMission = characterIntersection(electedTeam, spies);
             // If the mission team has only 2 people on the first mission return false to remove suspicion, may need to add a random
             // component to this
             // However would only be worthwhile if there was intelligence kept between games with the same agents, can't do that
             // so best to be safe earlier in the game
-            if(currProposedTeam.length() == 2 && missionNum == 1){
+            if(electedTeam.length() == 2 && missionNum == 1){
                 return false;
             }
             // Assume other agents will vote for in case that 2 or more agents are on mission, only need more than 1
             // vote on 4th mission in games of player size 7 and higher
-            if(!(numPlayers > 6 && missionNum == 4) && spiesOnMission > 1){
+            if(minSpiesRequired == 1 && spiesOnMission > 1){
+                // maybe random seed this?
                 return false;
             }
             return true;
@@ -424,7 +448,29 @@ public class HeuristicAgent implements Agent{
      **/
     @Override
     public void get_Traitors(int traitors) {
+        // Need to do Bayesian updates to improve suspicion whether 0 or greater than 0
+        Double prior = 1/(double)numPlayers;
+        Double likelihood;
 
+        if(traitors >= minSpiesRequired){
+            for(PBlock spyCombo : suspicion){
+                // NEED THE ACTUAL CHARACTER INTERSECTION NOT JUST THE INTEGER FOR DETERMINING LIKELIHOOD
+                if(characterIntersection(electedTeam, spyCombo.composition) > minSpiesRequired){
+
+                    if
+                }
+                if(spyCombo.composition.contains(currLeader) && electedTeam.contains(currLeader)){
+                    likelihood = 1/(double)(numPlayers - numSpies);
+                }
+                else if(electedTeam.contains()){
+
+                }
+
+            }
+
+
+
+        }
     }
 
     /**
