@@ -208,7 +208,7 @@ public class HeuristicAgent implements Agent{
      * @param spiesUnsorted     String which represents the spies, checking if these characters exist in team, if so keep for result.
      * @return found    String made up of character intersection between the 2 arrays
      */
-    private int characterIntersection(String teamUnsorted, String spiesUnsorted){
+    private String characterIntersection(String teamUnsorted, String spiesUnsorted){
         // Will usually encounter only sorted strings but double checking for robustness
         String team = getSortedString(spiesUnsorted);
         String spies = getSortedString(spiesUnsorted);
@@ -272,7 +272,7 @@ public class HeuristicAgent implements Agent{
         int possibleSpies;
         for(PBlock consideredTeam : allPossibleTeams){
             for(PBlock spyCombo : suspicionArr){
-                possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition);
+                possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition).length();
                 // Check if minimum Spies present
                 if(possibleSpies >= minSpiesRequired){
                     // Accumulate the suspicion
@@ -422,7 +422,7 @@ public class HeuristicAgent implements Agent{
         }
         else{
             // Government Spy behaviour
-            int spiesOnMission = characterIntersection(electedTeam, spies);
+            int spiesOnMission = characterIntersection(electedTeam, spies).length();
             // If the mission team has only 2 people on the first mission return false to remove suspicion, may need to add a random
             // component to this
             // However would only be worthwhile if there was intelligence kept between games with the same agents, can't do that
@@ -449,13 +449,38 @@ public class HeuristicAgent implements Agent{
     @Override
     public void get_Traitors(int traitors) {
         // Need to do Bayesian updates to improve suspicion whether 0 or greater than 0
-        Double prior = 1/(double)numPlayers;
-        Double likelihood;
+        Double prior = 1.0/(double)numPlayers;
+        Double likelihood = 0.0;
+        String spiesInElectedTeam;
+        // Big assumption that traitors == spies and not resistance, hopefully implemented that Resistance
+        // never betrays
 
+        // If enouogh traitors to beray the mission
         if(traitors >= minSpiesRequired){
             for(PBlock spyCombo : suspicion){
-                // NEED THE ACTUAL CHARACTER INTERSECTION NOT JUST THE INTEGER FOR DETERMINING LIKELIHOOD
-                if(characterIntersection(electedTeam, spyCombo.composition) > minSpiesRequired){
+                spiesInElectedTeam = characterIntersection(electedTeam, spyCombo.composition);
+                // Assume that a leader spy won't select more than the required
+                likelihood = 0.0;
+                // If
+                if(spiesInElectedTeam.contains(currLeader) && spiesInElectedTeam.length() > minSpiesRequired){
+                    likelihood = 0.0;
+                }
+                if(spiesInElectedTeam.contains(currLeader) && spiesInElectedTeam.length() == minSpiesRequired){
+                    likelihood = 1.0/(double)(numPlayers - numSpies);
+                }
+                else if(!spiesInElectedTeam.contains(currLeader) && spiesInElectedTeam.length() == minSpiesRequired){
+                    likelihood = 1.0/(double)(playersExcludeSelf.length());
+                }
+
+                if(spiesInElectedTeam.length() == traitors && spiesInElectedTeam.length() <= minSpiesRequired){
+                    if(spiesInElectedTeam.contains(currLeader)){
+
+                    }
+                    else if()
+                }
+
+
+                if(characterIntersection(electedTeam, spyCombo.composition).length() > minSpiesRequired){
 
                     if
                 }
