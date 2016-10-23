@@ -42,6 +42,30 @@ public class HeuristicAgent implements Agent{
         display.println(s);
     }
 
+    /**
+     * nChooseK
+     *
+     * Probability function helper, determines how many unique options of size k can be derived from something size n
+     * @param n     The integer representing the pool size from which options are being extracted
+     * @param k     The integer size k which determines the size of the combinations being looked for inside of n
+     * @return      Integer representing the number of unique options possible
+     */
+    int nChooseK(int n, int k){
+        if( k < 0 || k > n){
+            return 0;
+        }
+        if(k > n/2){
+            k = n - k;
+        }
+        int answer = 1;
+        for(int i = 1; i <= k; ++i){
+            answer *= (n + 1 - i);
+            answer /= i;
+        }
+        return answer;
+    }
+
+
 
     /**
      * getSortedString
@@ -226,7 +250,7 @@ public class HeuristicAgent implements Agent{
                 ++j;
             }
         }
-        return found.length();
+        return found.toString();
     }
 
     /**
@@ -371,7 +395,7 @@ public class HeuristicAgent implements Agent{
             for(int m = 0; m < missionTeams.size(); ++m){
                 //  Find the relevant ranking (by suspicion) of the proposed team
                 if(missionTeams.get(m).composition.equals(currProposedTeam)){
-                    // Arrbitrary fractional cutoff instead of perfect answer, cannot determine how other agents act
+                    // Arbitrary fractional cutoff instead of perfect answer, cannot determine how other agents act
                     // Possibly train this point
                     Double relevantRank = (double)m/(double)missionTeams.size();
                     Double cutoff = (double)numSpies/(double)numPlayers;
@@ -449,52 +473,65 @@ public class HeuristicAgent implements Agent{
     @Override
     public void get_Traitors(int traitors) {
         // Need to do Bayesian updates to improve suspicion whether 0 or greater than 0
-        Double prior = 1.0/(double)numPlayers;
+        Double prior = 1.0/(double)(nChooseK(numPlayers, numSpies));
         Double likelihood = 0.0;
-        String spiesInElectedTeam;
+        Double unnormPos;
+        Double totalProbability = 0.0;
+        ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
+
+        String assumedSpiesInElectedTeam;
         // Big assumption that traitors == spies and not resistance, hopefully implemented that Resistance
         // never betrays
 
-        // If enouogh traitors to beray the mission
-        if(traitors >= minSpiesRequired){
+        // If single traitor exists need to add suspicion for presence in team, regardless of win or not
+        // Doesn't win in Misison 4 of 7 player and higher games
+        if(traitors > 0){
             for(PBlock spyCombo : suspicion){
-                spiesInElectedTeam = characterIntersection(electedTeam, spyCombo.composition);
-                // Assume that a leader spy won't select more than the required
+                assumedSpiesInElectedTeam = characterIntersection(electedTeam, spyCombo.composition);
                 likelihood = 0.0;
-                // If
-                if(spiesInElectedTeam.contains(currLeader) && spiesInElectedTeam.length() > minSpiesRequired){
-                    likelihood = 0.0;
-                }
-                if(spiesInElectedTeam.contains(currLeader) && spiesInElectedTeam.length() == minSpiesRequired){
-                    likelihood = 1.0/(double)(numPlayers - numSpies);
-                }
-                else if(!spiesInElectedTeam.contains(currLeader) && spiesInElectedTeam.length() == minSpiesRequired){
-                    likelihood = 1.0/(double)(playersExcludeSelf.length());
+                // if mission 1 prior is
+                if(missionNum > 1){
+                    // inherit last posterior
+                    prior = spyCombo.suspicion;
                 }
 
-                if(spiesInElectedTeam.length() == traitors && spiesInElectedTeam.length() <= minSpiesRequired){
-                    if(spiesInElectedTeam.contains(currLeader)){
+                // Unintentional betrayal assumption is when the leader unknowingly picks a spy for the mission
+                // Intentional betrayal (leader is spy)
 
+                // Assume that a leader spy won't select more than the required and picks self to go on mission
+                // Keep greater than because don't know other agent code
+                // ---Mission failed---
+                if(assumedSpiesInElectedTeam.length() >= minSpiesRequired){
+                    // If Leader of mission is in the spycombo being examined
+                    if(assumedSpiesInElectedTeam.contains(currLeader)){
+                        // Assume spy leader specifically picks resistance players and number of spies for task
+                        likelihood = 1.0/(double)(minSpiesRequired * nChooseK(numPlayers - numSpies, electedTeam.length() - 1));
                     }
-                    else if()
+                    // If leader NOT in spycombo but spycombo still causes mission failure
+                    else{
+                        // unintentional pick
+                        likelihood = 1.0/(double)(nChooseK(numPlayers-1, electedTeam.length() - 1));
+                    }
+                }
+                // Mission --Mission accidentally won, spies voted 1 betrayal when needed 2--
+                else{
+                    // If leader, the leader knows to pick more than 1 spy or allow mission to succeed thus not
+                    // likely to be in this situation, however can occur if 1 spy betrays, the other does not or if
+                    // one spy is on mission by it's self and naively betrays in which case it is an unintentional pick
+                    likelihood = 1.0/(double)(nChooseK(numPlayers-1, electedTeam.length() - 1));
                 }
 
-
-                if(characterIntersection(electedTeam, spyCombo.composition).length() > minSpiesRequired){
-
-                    if
-                }
-                if(spyCombo.composition.contains(currLeader) && electedTeam.contains(currLeader)){
-                    likelihood = 1/(double)(numPlayers - numSpies);
-                }
-                else if(electedTeam.contains()){
-
-                }
-
+                // Unnorm posterior
+                unnormPos = prior*likelihood;
+                unnormPosteriors.add(unnormPos);
+                totalProbability += unnormPos;
             }
 
-
-
+            // Now that total Probability and unnormPosteriors are known
+            for(int i = 0; i < suspicion.size(); ++i){
+                // Add posterior probability
+                suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+            }
         }
     }
 
