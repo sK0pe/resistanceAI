@@ -167,25 +167,20 @@ public class HeuristicAgent implements Agent{
             this.numSpies = spies.length();
 
             // If spy string contains my name, I'm a spy
-            this.spy = spies.contains(name);
+            if(spies.contains(name)){
+                this.spy = true;
+            }
+            else{
+                this.spy = false;
+            }
+
             // Initialise Suspicion for all possible combinations of spies
             // Specify all resistance Members based on knowledge
-            for(Character s : spies.toCharArray()){
-                if(s != name.charAt(0)){
-                    removeSelf.deleteCharAt(removeSelf.indexOf(s.toString()));
-                }
-            }
-            resistanceMembers = removeSelf.toString();
-
-            // Initialise suspicion to 0.0
             if(spy){
-                // As a spy, keep track of own suspicion and everyone else, suspi
-                getPlayerCombinations(suspicion, players, numSpies);
+                this.resistanceMembers = characterRelativeComplement(players, spies);
             }
-            else {
-                // As Government agent ignore own suspicion, only interested in finding spies
-                getPlayerCombinations(suspicion, playersExcludeSelf, numSpies);
-            }
+            // Initialise suspicion to 0.0
+            getPlayerCombinations(suspicion, playersExcludeSelf, numSpies);
         }
 
         // Update mission number every round
@@ -199,14 +194,14 @@ public class HeuristicAgent implements Agent{
         this.minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
 
         // Test data to track.
-        write("Harry is playing in a " + numPlayers + "game");
+        write("Harry is playing in a " + numPlayers + " player game");
         write("Harry's character name is " + name);
         write("Players in this game are " + players);
         if(spy){
             write("Spy buddies are " + spies);
         }
         else {
-            write("There are " + spies.length() + "unknown spies!");
+            write("There are " + spies.length() + " unknown spies!");
         }
         write("The upcoming mission is " + mission);
         write("So far " + failures + " missions have been failed");
@@ -260,7 +255,7 @@ public class HeuristicAgent implements Agent{
             while( base.charAt(i) < unwanted.charAt(j)){
                 result.append(base.charAt(i++));
             }
-            if(base.charAt(i) < unwanted.charAt(j)){
+            if(base.charAt(i) == unwanted.charAt(j)){
                 ++i;
                 ++j;
             }
@@ -388,6 +383,10 @@ public class HeuristicAgent implements Agent{
             }
         }
 
+        for(PBlock s : suspicion){
+            write("Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
+        }
+
         if(!missionTeams.isEmpty()){
             missionTeams.clear();
         }
@@ -410,6 +409,8 @@ public class HeuristicAgent implements Agent{
     @Override
     public boolean do_Vote() {
         numProposals++;
+        write("number of proposals so far are: " + numProposals);
+        write("current leader is " + currLeader + " who proposed team: " + currProposedTeam);
         // If I'm the leader I'm voting for my own mission
         // If there have been 4 prior failed votes vote true regardless if Resistance as don't want to lose
         // If there have been 4 prior failed votes and I'm a spy, I give myself away if I vote false, therefore
@@ -420,22 +421,32 @@ public class HeuristicAgent implements Agent{
         // Spy behaviour, very simple
         // Could be married into the suspicion check so that spies don't vote for suspicious missions howeve
         if(spy){
+            write("I am a spy that is voting");
             if(characterIntersection(spies, currProposedTeam).length() == minSpiesRequired){
+                write("I'm the spy that voted true in do_Vote()");
                 return true;
             }
+            write("I'm the spy that voted false in do_Vote()");
             return false;
         }
         else{
             // missionTeams has been filled by the call to get_Proposed_Mission call earlier
             for(int m = 0; m < missionTeams.size(); ++m){
+                write("missionTeam at " + m + " is composed of " + missionTeams.get(m).composition + "with a suspicion of " + missionTeams.get(m).suspicion);
                 //  Find the relevant ranking (by suspicion) of the proposed team
                 if(missionTeams.get(m).composition.equals(currProposedTeam)){
                     // Arbitrary fractional cutoff instead of perfect answer, cannot determine how other agents act
                     // Possibly train this point
                     Double relevantRank = (double)m/(double)missionTeams.size();
                     Double cutoff = (double)numSpies/(double)numPlayers;
+                    write("relevant rank is " + relevantRank + " while cutoff is " + cutoff);
                     if( relevantRank <= cutoff || missionTeams.get(m).suspicion.equals(missionTeams.get(0).suspicion)){
+                        write("I voted true for the resistance");
                         return true;
+                    }
+                    else{
+                        write("I voted against mission as they seemed to suspicious");
+                        return false;
                     }
                 }
             }
@@ -453,7 +464,9 @@ public class HeuristicAgent implements Agent{
     public void get_Votes(String yays) {
         // Record those who vote for and against missions to assist in Bayesian updates
         String votedForMissionTeam = getSortedString(yays);
+        write("Players who voted for the mission are: " + votedForMissionTeam + " and " + yays);
         String nays = characterRelativeComplement(players, votedForMissionTeam);
+        write("Players who voted against the mission are: " + nays);
         String assumedSpiesInNays;
 
         // Check if naive spy gave away that they are a spy
@@ -537,7 +550,7 @@ public class HeuristicAgent implements Agent{
             }
             // Assume other agents will vote for in case that 2 or more agents are on mission, only need more than 1
             // vote on 4th mission in games of player size 7 and higher
-            if(minSpiesRequired == 1 && spiesOnMission > 1 && numFailures < 2){
+            if(spiesOnMission > minSpiesRequired && numFailures < 2){
                 // maybe random seed this?
                 return false;
             }
@@ -608,7 +621,10 @@ public class HeuristicAgent implements Agent{
             // Now that total Probability and unnormPosteriors are known
             for(int i = 0; i < suspicion.size(); ++i){
                 // Add posterior probability
-                suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+                // Do not let future priors be reset to 0.0 because not handling case where 2 spies on the same team
+                if(unnormPosteriors.get(i) != 0.0){
+                    suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+                }
             }
         }
     }
