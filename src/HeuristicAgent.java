@@ -192,19 +192,6 @@ public class HeuristicAgent implements Agent{
         // Determine how many spies are required to betray mission
         // i.e. only on games of player size 7 or higher and only on mission 4
         this.minSpiesRequired = (missionNum == 4 && numPlayers > 6) ? 2 : 1;
-
-        // Test data to track.
-        write("Harry is playing in a " + numPlayers + " player game");
-        write("Harry's character name is " + name);
-        write("Players in this game are " + players);
-        if(spy){
-            write("Spy buddies are " + spies);
-        }
-        else {
-            write("There are " + spies.length() + " unknown spies!");
-        }
-        write("The upcoming mission is " + mission);
-        write("So far " + failures + " missions have been failed");
     }
 
     /**
@@ -338,10 +325,10 @@ public class HeuristicAgent implements Agent{
         currProposedTeam = getSortedString(mission);
 
         // If I'm not the leader, check my suspicion for the team proposed
-        if(!leader.equals(name)){
+        //if(!leader.equals(name)){
             // Use this information to perform Bayesian update on suspicion array
             // P(spyCombo are spies | mission proposed by leader)
-            Double prior = 1.0/(double)(nChooseK(numPlayers, numSpies));
+            Double prior;
             Double likelihood = 0.0;
             Double unnormPos;
             Double totalProbability = 0.0;
@@ -357,8 +344,13 @@ public class HeuristicAgent implements Agent{
                     // Inherit prior probability from suspicion array
                     prior = spyCombo.suspicion;
                 }
+                else{
+                    prior = 1.0/(double)(nChooseK(numPlayers, numSpies));
+                }
 
-                if(assumedSpiesInMission.length() == minSpiesRequired){
+                //if(assumedSpiesInMission.length() >= minSpiesRequired){
+
+                if(assumedSpiesInMission.length() >= 0){
                     if(assumedSpiesInMission.contains(leader)){
                         likelihood = 1.0/(double)(nChooseK(numPlayers - numSpies, currProposedTeam.length() - 1));
                     }
@@ -381,7 +373,7 @@ public class HeuristicAgent implements Agent{
                     suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
                 }
             }
-        }
+        //}
 
         for(PBlock s : suspicion){
             write("Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
@@ -409,8 +401,6 @@ public class HeuristicAgent implements Agent{
     @Override
     public boolean do_Vote() {
         numProposals++;
-        write("number of proposals so far are: " + numProposals);
-        write("current leader is " + currLeader + " who proposed team: " + currProposedTeam);
         // If I'm the leader I'm voting for my own mission
         // If there have been 4 prior failed votes vote true regardless if Resistance as don't want to lose
         // If there have been 4 prior failed votes and I'm a spy, I give myself away if I vote false, therefore
@@ -421,31 +411,24 @@ public class HeuristicAgent implements Agent{
         // Spy behaviour, very simple
         // Could be married into the suspicion check so that spies don't vote for suspicious missions howeve
         if(spy){
-            write("I am a spy that is voting");
             if(characterIntersection(spies, currProposedTeam).length() == minSpiesRequired){
-                write("I'm the spy that voted true in do_Vote()");
                 return true;
             }
-            write("I'm the spy that voted false in do_Vote()");
             return false;
         }
         else{
             // missionTeams has been filled by the call to get_Proposed_Mission call earlier
             for(int m = 0; m < missionTeams.size(); ++m){
-                write("missionTeam at " + m + " is composed of " + missionTeams.get(m).composition + "with a suspicion of " + missionTeams.get(m).suspicion);
                 //  Find the relevant ranking (by suspicion) of the proposed team
                 if(missionTeams.get(m).composition.equals(currProposedTeam)){
                     // Arbitrary fractional cutoff instead of perfect answer, cannot determine how other agents act
                     // Possibly train this point
                     Double relevantRank = (double)m/(double)missionTeams.size();
                     Double cutoff = (double)numSpies/(double)numPlayers;
-                    write("relevant rank is " + relevantRank + " while cutoff is " + cutoff);
                     if( relevantRank <= cutoff || missionTeams.get(m).suspicion.equals(missionTeams.get(0).suspicion)){
-                        write("I voted true for the resistance");
                         return true;
                     }
                     else{
-                        write("I voted against mission as they seemed to suspicious");
                         return false;
                     }
                 }
@@ -464,9 +447,7 @@ public class HeuristicAgent implements Agent{
     public void get_Votes(String yays) {
         // Record those who vote for and against missions to assist in Bayesian updates
         String votedForMissionTeam = getSortedString(yays);
-        write("Players who voted for the mission are: " + votedForMissionTeam + " and " + yays);
         String nays = characterRelativeComplement(players, votedForMissionTeam);
-        write("Players who voted against the mission are: " + nays);
         String assumedSpiesInNays;
 
         // Check if naive spy gave away that they are a spy
@@ -479,6 +460,10 @@ public class HeuristicAgent implements Agent{
                     if(assumedSpiesInNays.length() > 0){
                         spyCombo.suspicion = assumedSpiesInNays.length()/(double)numSpies;
                     }
+                }
+
+                for(PBlock s : suspicion){
+                    write("Spyblock after get_Votes on turn 4 is " + s.composition + " has suspicion level " + s.suspicion);
                 }
             }
             return;
@@ -508,10 +493,12 @@ public class HeuristicAgent implements Agent{
             unnormPosteriors.add(unnormPos);
             totalProbability += unnormPos;
         }
-
         // Now that total Probability and unnormPosteriors are known, update prior with newly calculated posterior
         for(int i = 0; i < suspicion.size(); ++i){
             suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+        }
+        for(PBlock s : suspicion){
+            write("Spyblock after get_Votes is " + s.composition + " has suspicion level " + s.suspicion);
         }
     }
 
@@ -627,6 +614,9 @@ public class HeuristicAgent implements Agent{
                 }
             }
         }
+        for(PBlock s : suspicion){
+            write("Spyblock after get_Traitors is " + s.composition + " has suspicion level " + s.suspicion);
+        }
     }
 
     /**
@@ -657,7 +647,6 @@ public class HeuristicAgent implements Agent{
      */
     @Override
     public void get_Accusation(String accuser, String accused) {
-        write("I'm not a spy you fools!");
     }
 
     /**
