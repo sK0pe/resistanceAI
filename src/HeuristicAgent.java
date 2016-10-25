@@ -347,15 +347,20 @@ public class HeuristicAgent implements Agent{
 
             // Hard coded likelihood if leader, can choose any team including spies or non spies, except missions with 2
             // spies required
-            // likelihood = 1.0/(double)(nChooseK(numPlayers - 1, currProposedTeam.length() - 1))
-
-            if(assumedSpiesInMission.contains(leader)){
-                // Assume spy leader wants resistance members to fill all but required slots
+            if(minSpiesRequired == 2 && assumedSpiesInMission.contains(leader)){
                 likelihood = 1.0/(double)(nChooseK(numResistance, currProposedTeam.length() - minSpiesRequired));
             }
             else{
                 likelihood = 1.0/(double)(nChooseK(numPlayers - 1, currProposedTeam.length() - 1));
             }
+
+//            if(assumedSpiesInMission.contains(leader)){
+//                // Assume spy leader wants resistance members to fill all but required slots
+//                likelihood = 1.0/(double)(nChooseK(numResistance, currProposedTeam.length() - minSpiesRequired));
+//            }
+//            else{
+//                likelihood = 1.0/(double)(nChooseK(numPlayers - 1, currProposedTeam.length() - 1));
+//            }
 
             unnormPos = prior*likelihood;
             unnormPosteriors.add(unnormPos);
