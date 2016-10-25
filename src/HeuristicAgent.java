@@ -18,6 +18,7 @@ public class HeuristicAgent implements Agent{
     private String electedTeam = "";
     private int numPlayers;
     private int numSpies;
+    private int numResistance;
     private int minSpiesRequired;
     private int numFailures;
     private String currProposedTeam;
@@ -159,12 +160,11 @@ public class HeuristicAgent implements Agent{
             this.players = players;
             this.numPlayers = players.length();
             // Make string of players excluding self
-            StringBuilder removeSelf = new StringBuilder(players);
-            removeSelf.deleteCharAt(removeSelf.indexOf(name));
-            this.playersExcludeSelf = removeSelf.toString();
+            this.playersExcludeSelf = characterRelativeComplement(players, name);
             // Spy string provided from Game
             this.spies = spies;
             this.numSpies = spies.length();
+            this.numResistance = numPlayers - numSpies;
 
             // If spy string contains my name, I'm a spy
             if(spies.contains(name)){
@@ -180,7 +180,7 @@ public class HeuristicAgent implements Agent{
                 this.resistanceMembers = characterRelativeComplement(players, spies);
             }
             // Initialise suspicion to 0.0
-            getPlayerCombinations(suspicion, playersExcludeSelf, numSpies);
+            getPlayerCombinations(this.suspicion, this.playersExcludeSelf, numSpies);
         }
 
         // Update mission number every round
@@ -324,60 +324,60 @@ public class HeuristicAgent implements Agent{
         currLeader = leader;
         currProposedTeam = getSortedString(mission);
 
-        // If I'm not the leader, check my suspicion for the team proposed
-        //if(!leader.equals(name)){
-            // Use this information to perform Bayesian update on suspicion array
-            // P(spyCombo are spies | mission proposed by leader)
-            Double prior;
-            Double likelihood = 0.0;
-            Double unnormPos;
-            Double totalProbability = 0.0;
-            ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
-            String assumedSpiesInMission;
+        // Use this information to perform Bayesian update on suspicion array
+        // P(spyCombo are spies | mission proposed by leader)
+        Double prior;
+        Double likelihood = 0.0;
+        Double unnormPos;
+        Double totalProbability = 0.0;
+        ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
+        String assumedSpiesInMission;
 
-            // Iterate through all possibly spy combinations to find unnorm posterior probabilites and total probability
-
-            for(PBlock spyCombo : suspicion){
-                // Determine likelihood = P(mission proposed | spyCombo are spies)
-                assumedSpiesInMission = characterIntersection(spyCombo.composition, currProposedTeam);
-                if(missionNum > 1){
-                    // Inherit prior probability from suspicion array
-                    prior = spyCombo.suspicion;
-                }
-                else{
-                    prior = 1.0/(double)(nChooseK(numPlayers, numSpies));
-                }
-
-                //if(assumedSpiesInMission.length() >= minSpiesRequired){
-
-                if(assumedSpiesInMission.length() >= 0){
-                    if(assumedSpiesInMission.contains(leader)){
-                        likelihood = 1.0/(double)(nChooseK(numPlayers - numSpies, currProposedTeam.length() - 1));
-                    }
-                    else{
-                        likelihood = 1.0/(double)(nChooseK(numPlayers - 1, mission.length() - 1));
-                    }
-                }
-
-                unnormPos = prior*likelihood;
-                unnormPosteriors.add(unnormPos);
-                totalProbability += unnormPos;
+        // Iterate through all possibly spy combinations to find unnorm posterior probabilites and total probability
+        for(PBlock spyCombo : suspicion){
+            // Determine likelihood = P(mission proposed | spyCombo are spies)
+            assumedSpiesInMission = characterIntersection(spyCombo.composition, currProposedTeam);
+            if(missionNum > 1){
+                // Inherit prior probability from suspicion array
+                prior = spyCombo.suspicion;
+            }
+            else{
+                prior = 1.0/(double)(nChooseK(numPlayers, numSpies));
             }
 
-            // Now that total Probability and unnormPosteriors are known, update prior with newly calculated posterior
-            for(int i = 0; i < suspicion.size(); ++i){
-                // This if check is a sanity check that does not remove prior history, primarily aimed at not losing
-                // Bayesian update history when encountering multiple spies on a mission (more than required to succeed)
-                if(unnormPosteriors.get(i) != 0.0){
-                    // Add posterior probability
-                    suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
-                }
-            }
-        //}
+            // Hard coded likelihood if leader, can choose any team including spies or non spies, except missions with 2
+            // spies required
+            // likelihood = 1.0/(double)(nChooseK(numPlayers - 1, currProposedTeam.length() - 1))
 
+            if(assumedSpiesInMission.contains(leader)){
+                // Assume spy leader wants resistance members to fill all but required slots
+                likelihood = 1.0/(double)(nChooseK(numResistance, currProposedTeam.length() - minSpiesRequired));
+            }
+            else{
+                likelihood = 1.0/(double)(nChooseK(numPlayers - 1, currProposedTeam.length() - 1));
+            }
+
+            unnormPos = prior*likelihood;
+            unnormPosteriors.add(unnormPos);
+            totalProbability += unnormPos;
+        }
+
+        // Now that total Probability and unnormPosteriors are known, update prior with newly calculated posterior
+        for(int i = 0; i < suspicion.size(); ++i){
+            // This if check is a sanity check that does not remove prior history, primarily aimed at not losing
+            // Bayesian update history when encountering multiple spies on a mission (more than required to succeed)
+            if(unnormPosteriors.get(i) != 0.0){
+                // Add posterior probability
+                suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+            }
+        }
+
+
+        write(name + "suspicions = ");
         for(PBlock s : suspicion){
             write("Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
         }
+        write("\n");
 
         if(!missionTeams.isEmpty()){
             missionTeams.clear();
@@ -409,9 +409,13 @@ public class HeuristicAgent implements Agent{
             return true;
         }
         // Spy behaviour, very simple
-        // Could be married into the suspicion check so that spies don't vote for suspicious missions howeve
+        // Could be married into the suspicion check so that spies don't vote for suspicious missions
         if(spy){
-            if(characterIntersection(spies, currProposedTeam).length() == minSpiesRequired){
+            String spyTeam = characterIntersection(spies, currProposedTeam);
+            if(spyTeam.length() >= minSpiesRequired){
+                if(spyTeam.length() > minSpiesRequired && characterIntersection(spyTeam, currLeader).length() == 0){
+                    return false;
+                }
                 return true;
             }
             return false;
@@ -462,9 +466,11 @@ public class HeuristicAgent implements Agent{
                     }
                 }
 
+                write(name + "suspicions = ");
                 for(PBlock s : suspicion){
                     write("Spyblock after get_Votes on turn 4 is " + s.composition + " has suspicion level " + s.suspicion);
                 }
+                write("\n");
             }
             return;
         }
@@ -497,9 +503,12 @@ public class HeuristicAgent implements Agent{
         for(int i = 0; i < suspicion.size(); ++i){
             suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
         }
+
+        write(name + "suspicions = ");
         for(PBlock s : suspicion){
             write("Spyblock after get_Votes is " + s.composition + " has suspicion level " + s.suspicion);
         }
+        write("\n");
     }
 
     /**
@@ -614,9 +623,11 @@ public class HeuristicAgent implements Agent{
                 }
             }
         }
+        write(name + "suspicions = ");
         for(PBlock s : suspicion){
             write("Spyblock after get_Traitors is " + s.composition + " has suspicion level " + s.suspicion);
         }
+        write("\n");
     }
 
     /**
