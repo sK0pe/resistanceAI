@@ -21,6 +21,12 @@ public class HeuristicAgent implements Agent{
     private int numResistance;
     private int minSpiesRequired;
     private int numFailures;
+
+    private double RANDOM_PLAY = 0.1;
+    private double BETRAYAL_BLUNDER = 0.2;
+    private double RESISTANCE_YAY = 0.5;
+    private double VOTING_BLUNDER = 0.2;
+
     private String currProposedTeam;
     // Am I a spy?
     private boolean spy;
@@ -179,8 +185,11 @@ public class HeuristicAgent implements Agent{
             if(spy){
                 this.resistanceMembers = characterRelativeComplement(players, spies);
             }
-            // Initialise suspicion to 0.0
-            getPlayerCombinations(suspicion, playersExcludeSelf, numSpies);
+            // Initialise suspicion with equal probability for all combinations.
+            getPlayerCombinations(suspicion, players, numSpies);
+            for (PBlock spyCombo : suspicion) {
+                spyCombo.suspicion = 1.0/(double)(nChooseK(numPlayers, numSpies));
+            }
         }
 
         // Update mission number every round
@@ -254,6 +263,17 @@ public class HeuristicAgent implements Agent{
         return result.toString();
     }
 
+
+    /**
+     * considerAllTeamsSuspicion
+     *
+     * Alternate launcher to
+     *
+     **/
+    private void considerAllTeamSuspicion(ArrayList<PBlock> allPossibleTeams, ArrayList<PBlock> suspicionArr){
+        considerAllTeamSuspicion(allPossibleTeams, suspicionArr, null);
+    }
+
     /**
      * considerAllTeamsSuspicion
      *
@@ -262,21 +282,43 @@ public class HeuristicAgent implements Agent{
      * @param suspicionArr          A container that holds all suspicion, in most cases will be the global suspicion array.
      *                              It does not include teams with "name" so 0.0 suspicion will be added when encountering
      *                              teams with self.
+     * @personToExclude				A String which defines player to exclude from the Suspicion Array, if null, don't exclude
+     * 								anyone
      *
      *
      */
-    private void considerAllTeamSuspicion(ArrayList<PBlock> allPossibleTeams, ArrayList<PBlock> suspicionArr){
+    private void considerAllTeamSuspicion(ArrayList<PBlock> allPossibleTeams, ArrayList<PBlock> suspicionArr, String personToExclude){
         int possibleSpies;
-        for(PBlock consideredTeam : allPossibleTeams){
-            for(PBlock spyCombo : suspicionArr){
-                possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition).length();
-                // Check if minimum Spies present
-                if(possibleSpies >= minSpiesRequired){
-                    // Accumulate the suspicion
-                    consideredTeam.setSuspicion(consideredTeam.suspicion + spyCombo.suspicion);
+        double normalisationFactor = 1.0;
+
+        if (personToExclude != null) {
+            normalisationFactor = 0.0;
+            for(PBlock spyCombo : suspicionArr) {
+                if (!spyCombo.composition.contains(personToExclude)) {
+                    normalisationFactor += spyCombo.suspicion;
                 }
             }
         }
+
+        for(PBlock consideredTeam : allPossibleTeams) {
+            for (PBlock spyCombo : suspicionArr) {
+                if (personToExclude != null && spyCombo.composition.contains(personToExclude)) {
+                    continue;
+                }
+
+                possibleSpies = characterIntersection(consideredTeam.composition, spyCombo.composition).length();
+                // Check if minimum Spies present
+                if (possibleSpies >= minSpiesRequired) {
+                    // Accumulate the suspicion and normalise
+                    consideredTeam.setSuspicion(consideredTeam.suspicion + spyCombo.suspicion / normalisationFactor);
+                }
+            }
+        }
+
+        for(PBlock consideredTeam : allPossibleTeams){
+            write(consideredTeam.composition + " has cumulative suspicion of " + consideredTeam.suspicion);
+        }
+        write("\n");
     }
 
 
@@ -294,21 +336,52 @@ public class HeuristicAgent implements Agent{
         // Initalise all possible mission team combinations and intialise to 0 suspicion
         if(!spy){
             // Only trust self
-            getPlayerCombinations(lowSuspicionTeam, playersExcludeSelf, number-1);
+            getPlayerCombinations(lowSuspicionTeam, playersExcludeSelf, number - 1);
         }
-        else{
-            // Get all player combinations without spies to seed suspicion
-            getPlayerCombinations(lowSuspicionTeam, resistanceMembers, number - 1);
+        else {
+            if (minSpiesRequired == 1) {
+                // Get all player combinations without spies to seed suspicion
+                getPlayerCombinations(lowSuspicionTeam, resistanceMembers, number - 1);
+            }
+            else {
+                // If we need another spy to go with us, consider all combinations with exactly
+                // one other spy except ourselves.
+                getPlayerCombinations(lowSuspicionTeam, resistanceMembers, number - 2);
+                ArrayList<PBlock> lowSuspicionTeamWithSecondSpy = new ArrayList<>();
+                for (PBlock block : lowSuspicionTeam) {
+                    for (char spy : spies.toCharArray()) {
+                        if (name.charAt(0) != spy) {
+                            lowSuspicionTeamWithSecondSpy.add(new PBlock(block.composition + spy, 0.0));
+                        }
+                    }
+                }
+                lowSuspicionTeam = lowSuspicionTeamWithSecondSpy;
+            }
         }
-        // Fill all possible mission teams with suspicion (excluding self, assume going on mission)
-        considerAllTeamSuspicion(lowSuspicionTeam, suspicion);
-        // Sort all possible mission teams, based on suspicion
-        Collections.sort(lowSuspicionTeam);
-        // Now have informed decision of providing best possible teams to go along with self as a leader (naive)
-        // Return least likely team to have a spy on it plus self
-        // As naive, works for Government spy and Resistance member
-        return lowSuspicionTeam.get(0).composition + name;
+
+        // Add myself to each team being considered.
+        ArrayList<PBlock> lowSuspicionTeamIncludingMe = new ArrayList<>();
+        for (PBlock block : lowSuspicionTeam) {
+            lowSuspicionTeamIncludingMe.add(new PBlock(block.composition + name, 0.0));
+        }
+        lowSuspicionTeam = lowSuspicionTeamIncludingMe;
+
+
+        if (!spy){
+            // Fill all possible mission teams with suspicion (from my own perspective)
+            considerAllTeamSuspicion(lowSuspicionTeam, suspicion, name);
+    } else {
+        // Fill all possible mission teams with suspicion (from an external perspective)
+        considerAllTeamSuspicion(lowSuspicionTeam, suspicion, null);
     }
+    // Sort all possible mission teams, based on suspicion
+    Collections.sort(lowSuspicionTeam);
+    // Now have informed decision of providing best possible teams to go along with self as a leader (naive)
+    // Return least likely team to have a spy on it plus self
+    // As naive, works for Government spy and Resistance member
+    write(name + " is voting for " + lowSuspicionTeam.get(0).composition + ">>>>>>>>>>>>>>>");
+    return lowSuspicionTeam.get(0).composition;
+}
 
     /**
      * Provides information of a given mission.
@@ -331,32 +404,28 @@ public class HeuristicAgent implements Agent{
         Double likelihood;
         Double unnormPos;
         Double totalProbability = 0.0;
+        Double randomTeamPicking = 1.0/(double)(nChooseK(numPlayers, currProposedTeam.length()));
         ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
         String assumedSpiesInMission;
 
         // Iterate through all possibly spy combinations to find unnorm posterior probabilites and total probability
-
         for(PBlock spyCombo : suspicion){
             // Determine likelihood = P(mission proposed | spyCombo are spies)
             assumedSpiesInMission = characterIntersection(spyCombo.composition, currProposedTeam);
-            if(missionNum > 1){
-                // Inherit prior probability from suspicion array
-                prior = spyCombo.suspicion;
-            }
-            else{
-                prior = 1.0/(double)(nChooseK(numPlayers, numSpies));
-            }
+            // Inherit prior probability from suspicion array
+            prior = spyCombo.suspicion;
 
 
-            // Leaders are usually likely to be more suspicious and usually choose from resistance although they could also choose from
-            // spies if pressured, prefer not to
-            if(assumedSpiesInMission.contains(leader)){
-                likelihood = 1.0/(double)(nChooseK(numResistance, currProposedTeam.length() - minSpiesRequired));
+            likelihood = RANDOM_PLAY * randomTeamPicking;
+            if(minSpiesRequired > 1 && assumedSpiesInMission.contains(leader)) {
+                // Spy needs to ensure the right number of spies for the mission.
+                int numCombinations = nChooseK(numResistance, currProposedTeam.length() - minSpiesRequired) * nChooseK(numSpies - 1, minSpiesRequired - 1);
+                // non random play
+                likelihood += (1.0 - RANDOM_PLAY) * 1.0/(double)(numCombinations);
             }
-            else{
-                // Case that leader is not a spy
-                // equally likely for a spy to be not on the mission as to be on the mission
-                likelihood = 1.0/(double)(nChooseK(numPlayers - 1, mission.length() - 1));
+            else {
+                // Leader picks others to go with them completely at random.
+                likelihood += (1.0 - RANDOM_PLAY) * 1.0/(double)(nChooseK(numPlayers - 1, currProposedTeam.length() - 1));
             }
 
             unnormPos = prior*likelihood;
@@ -371,8 +440,11 @@ public class HeuristicAgent implements Agent{
         }
 
         for(PBlock s : suspicion){
-            write("Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
+            if(name.equals("A")){
+                write(name + " says : Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
+            }
         }
+        write("\n");
 
         if(!missionTeams.isEmpty()){
             missionTeams.clear();
@@ -382,8 +454,8 @@ public class HeuristicAgent implements Agent{
         // Missions with self included will have lower suspicion as I'm definitely part of the
         // Resistance.
         getPlayerCombinations(missionTeams, players, mission.length());
-        // Populate suspicion level
-        considerAllTeamSuspicion(missionTeams, suspicion);
+        // Populate suspicion level of others
+        considerAllTeamSuspicion(missionTeams, suspicion, name);
         // Sort the ArrayList by suspicion
         Collections.sort(missionTeams);
     }
@@ -405,212 +477,120 @@ public class HeuristicAgent implements Agent{
         }
         // Spy behaviour, very simple
         if(spy){
-            // Perfect situaton for a spy to have 1 betrayal card
-            if(characterIntersection(spies, currProposedTeam).length() == minSpiesRequired){
+            // Not enough spies - reject the mission.
+            if (characterIntersection(spies, currProposedTeam).length() < minSpiesRequired) {
+                return false;
+            }
+            // Perfect situaton: # of spies = # betrayals required, so all spies will betray.
+            else if (characterIntersection(spies, currProposedTeam).length() == minSpiesRequired) {
                 return true;
             }
-            // Assume only the leader will vote when more than the required spies are on the mission
-            if(characterIntersection(spies, currProposedTeam).length() > minSpiesRequired && currLeader.equals(name)){
-                return true;
+            // Too many spies: we may need to worry about giving away spy identities via excess betrayals.
+            else{
+                // Mission failure would end the game: excess betrayals don't matter.
+                if (numFailures == 2) {
+                    return true;
+                }
+                if (spies.contains(currLeader) && minSpiesRequired == 1) {
+                    // Only one betrayal required; the leader can betray safely.
+                    return true;
+                }
+                return false;
             }
-            return false;
         }
         else{
             // missionTeams has been filled by the call to get_Proposed_Mission call earlier
-            for(int m = 0; m < missionTeams.size(); ++m){
-                //  Find the relevant ranking (by suspicion) of the proposed team
-                if(missionTeams.get(m).composition.equals(currProposedTeam)){
-                    // Arbitrary fractional cutoff instead of perfect answer, cannot determine how other agents act
-                    // Possibly train this point
-                    Double relevantRank = (double)m/(double)missionTeams.size();
-                    Double cutoff = (double)numSpies/(double)numPlayers;
-                    if( relevantRank <= cutoff || missionTeams.get(m).suspicion.equals(missionTeams.get(0).suspicion)){
-                        /*if(spy){
-                            // Perfect situaton for a spy to have 1 betrayal card
-                            if(characterIntersection(spies, currProposedTeam).length() == minSpiesRequired){
-                                return true;
-                            }
-                            // Assume only the leader will vote when more than the required spies are on the mission
-                            if(characterIntersection(spies, currProposedTeam).length() > minSpiesRequired && currLeader.equals(name)){
-                                return true;
-                            }
-                            return false;
-                        }
-                        else{
-                            // As resistance always vote true if unsuspicious team
-                            return true;
-                        }*/
-                        return true;
-                    }
-                    else{
-                        return false;
-                    }
+            double midRange = (missionTeams.get(0).suspicion + missionTeams.get(currProposedTeam.length() - 1).suspicion)/2.0;
+            for(PBlock m : missionTeams){
+                if(m.composition.equals(currProposedTeam)){
+                    return (m.suspicion < midRange);
                 }
             }
-        }
-        return false;
-    }
-
-    /**
-     * Reports the votes for the previous mission
-     *
-     * @param yays the names of the agents who voted for the mission
-     * return within 100ms
-     **/
-    @Override
-    public void get_Votes(String yays) {
-        // Record those who vote for and against missions to assist in Bayesian updates
-        String votedForMissionTeam = getSortedString(yays);
-        String nays = characterRelativeComplement(players, votedForMissionTeam);
-        String assumedSpiesInNays;
-
-        // Check if naive spy gave away that they are a spy
-        // Can't do a meaningful Bayesian update on the last opportunity to vote for mission
-        // If there is a differential, it gives away who is a spy
-        if(numProposals == 4){
-            if(nays.length() > 0){
-                for(PBlock spyCombo : suspicion){
-                    assumedSpiesInNays = characterIntersection(spyCombo.composition, nays);
-                    if(assumedSpiesInNays.length() > 0){
-                        spyCombo.suspicion = assumedSpiesInNays.length()/(double)numSpies;
-                    }
-                }
-
-                for(PBlock s : suspicion){
-                    write("Spyblock after get_Votes on turn 4 is " + s.composition + " has suspicion level " + s.suspicion);
-                }
-            }
-            return;
-        }
-
-        // Use this information to perform Bayesian update on suspicion array for
-        // P(spyCombo are spies | mission proposed by leader)
-        Double prior;
-        Double likelihood;
-        Double unnormPos;
-        Double totalProbability = 0.0;
-        ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
-
-        // Iterate through all possibly spy combinations to find unnorm posterior probabilites and total probability
-        for(PBlock spyCombo : suspicion){
-            // Determine likelihood = P(mission proposed | spyCombo are spies)
-            assumedSpiesInNays = characterIntersection(spyCombo.composition, nays);
-            prior = spyCombo.suspicion;
-            // voting against a mission is always suspicious assuming good missions should be offered
-            if(assumedSpiesInNays.length() > 0){
-                likelihood = 1.0/(1.0 + (double)nChooseK(currProposedTeam.length(), 2));
-            }
-            else{
-                likelihood = 1.0/(double)nChooseK(numPlayers - numSpies, currProposedTeam.length() - 1);
-            }
-            unnormPos = prior*likelihood;
-            unnormPosteriors.add(unnormPos);
-            totalProbability += unnormPos;
-        }
-        // Now that total Probability and unnormPosteriors are known, update prior with newly calculated posterior
-        for(int i = 0; i < suspicion.size(); ++i){
-            suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
-        }
-        for(PBlock s : suspicion){
-            write("Spyblock after get_Votes is " + s.composition + " has suspicion level " + s.suspicion);
-        }
-    }
-
-    /**
-     * Reports the agents being sent on a mission.
-     * Should be able to be inferred from tell_ProposedMission and tell_Votes, but included for completeness.
-     *
-     * @param mission the Agents being sent on a mission
-     * return within 100ms
-     **/
-    @Override
-    public void get_Mission(String mission) {
-        electedTeam = getSortedString(mission);
-    }
-
-    /**
-     * Agent chooses to betray or not.
-     *
-     * @return true if agent betrays, false otherwise, within 1 sec
-     **/
-    @Override
-    public boolean do_Betray() {
-        // As resistance member always want missions to succeed
-        if(!spy){
             return false;
         }
-        else{
-            // Government Spy behaviour
-            int spiesOnMission = characterIntersection(electedTeam, spies).length();
-            // If the mission team has only 2 people on the first mission return false to remove suspicion, may need to add a random
-            // component to this
-            // However would only be worthwhile if there was intelligence kept between games with the same agents, can't do that
-            // so best to be safe earlier in the game
-            if(electedTeam.length() == 2 && missionNum == 1){
-                return false;
-            }
-            // Assume other agents will vote for in case that 2 or more agents are on mission, only need more than 1
-            // vote on 4th mission in games of player size 7 and higher
-            if(spiesOnMission > minSpiesRequired && numFailures < 2){
-                // maybe random seed this?
-                return false;
-            }
-            return true;
-        }
     }
 
-    /**
-     * Reports the number of people who betrayed the mission
-     *
-     * @param traitors the number of people on the mission who chose to betray (0 for success, greater than 0 for failure)
-     * return within 100ms
-     **/
-    @Override
-    public void get_Traitors(int traitors) {
-        // Need to do Bayesian updates to improve suspicion whether 0 or greater than 0
-        Double prior;
-        Double likelihood;
-        Double unnormPos;
-        Double totalProbability = 0.0;
-        ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
 
-        String assumedSpiesInElectedTeam;
-        // Big assumption that traitors == spies and not resistance, hopefully implemented that Resistance
-        // never betrays
+        /**
+         * Reports the votes for the previous mission
+         *
+         * @param yays the names of the agents who voted for the mission
+         * return within 100ms
+         **/
+        @Override
+        public void get_Votes(String yays) {
+            // Need to do Bayesian updates to improve suspicion whether 0 or greater than 0
+            Double prior;
+            Double likelihood;
+            Double unnormPos;
+            Double totalProbability = 0.0;
+            ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
+            String nays = characterRelativeComplement(players, yays);
+            String assumedSpiesinProposedTeam;
 
-        // If single traitor exists need to add suspicion for presence in team, regardless of win or not
-        // Doesn't win in Misison 4 of 7 player and higher games
-        if(traitors > 0){
-            for(PBlock spyCombo : suspicion){
-                assumedSpiesInElectedTeam = characterIntersection(electedTeam, spyCombo.composition);
-                likelihood = 0.0;
+            for (PBlock spyCombo : suspicion){
+                assumedSpiesinProposedTeam = characterIntersection(currProposedTeam, spyCombo.composition);
+                int numSpiesInTeam = assumedSpiesinProposedTeam.length();
                 // inherit last posterior
                 prior = spyCombo.suspicion;
 
-                // Unintentional betrayal assumption is when the leader unknowingly picks a spy for the mission
-                // Intentional betrayal (leader is spy)
+                // Default false vote for spies
+                boolean spies_should_vote_yay = false;
+                // Resistance vote yay with preset probability.
+                // Resistance are aloow to change up their vote a split up by a factor of 0.5
+                double resistance_yay_probability = RESISTANCE_YAY;
 
-                // Assume that a leader spy won't select more than the required and picks self to go on mission
-                // Keep greater than because don't know other agent code
-                // ---Mission failed---
-                if(assumedSpiesInElectedTeam.length() == minSpiesRequired){
-                    // If Leader of mission is in the spycombo being examined
-                    if(assumedSpiesInElectedTeam.contains(currLeader)){
-                        // Assume spy leader specifically picks resistance players and number of spies for task
-                        likelihood = 1.0/(double)(minSpiesRequired * nChooseK(numPlayers - numSpies, electedTeam.length() - 1));
+                // If it's the last proposal we assume the same likelihood regardless of the spy combo,
+                // since spies and non-spies are equally likely to make this blunder.
+                if (numProposals == 4) {
+                    spies_should_vote_yay = true;
+                    resistance_yay_probability = 1 - VOTING_BLUNDER;
+                }
+                else {
+                    // Spies won't vote for a team if there isn't enough spies
+                    if (numSpiesInTeam < minSpiesRequired) {
+                        spies_should_vote_yay = false;
                     }
-                    // If leader NOT in spycombo but spycombo still causes mission failure
-                    else{
-                        // unintentional pick
-                        likelihood = 1.0/(double)(nChooseK(numPlayers-1, electedTeam.length() - 1));
+                    // Spies are expected to vote yes for when a team has the minRequired spies to fail the mission
+                    // Naive strategy
+                    else if (numSpiesInTeam == minSpiesRequired) {
+                        spies_should_vote_yay = true;
+                    }
+                    else {
+                        //  When numFailures == 2 desperate to get any mission in which they can win a game
+                        if (numFailures == 2) {
+                            spies_should_vote_yay = true;
+                        }
+                        // coordinated with non-leaders betraying when > 2 required
+                        // if only 1 then the leader should betray as minimum evidence provided
+                        else if (spyCombo.composition.contains(currLeader) && minSpiesRequired == 1) {
+                            spies_should_vote_yay = true;
+                        }
                     }
                 }
-                // Mission --Mission accidentally won, spies voted 1 betrayal when needed 2--
-                else if(assumedSpiesInElectedTeam.length() < minSpiesRequired){
-                    // If leader, the leader knows to pick more than 1 spy or allow mission to succeed thus not
-                    // likely to be in this situation, however can occur if 1 spy betrays, the other does not or if
-                    // one spy is on mission by it's self and naively betrays in which case it is an unintentional pick
-                    likelihood = 1.0/(double)(nChooseK(numPlayers-1, electedTeam.length() - 1));
+
+                // Likelihood that a Spy will vote yes when it should be voting yes
+                double spy_yay_probability = spies_should_vote_yay ? 1.0 - VOTING_BLUNDER : VOTING_BLUNDER;
+                // Assume that when spies are voting in a coordinated fashion that they are setting up to fail
+                // a mission
+                // Likelihood is product of the independent likelihoods for each individual voter.
+                likelihood = 1.0;
+                for ( Character yay : yays.toCharArray()) {
+                    if (spyCombo.composition.contains(yay + "")) {
+                        likelihood *= spy_yay_probability;
+                    }
+                    else {
+                        likelihood *= resistance_yay_probability;
+                    }
+                }
+
+                for (Character nay : nays.toCharArray()) {
+                    if (spyCombo.composition.contains(nay + "")) {
+                        likelihood *= 1.0 - spy_yay_probability;
+                    }
+                    else {
+                        likelihood *= 1.0 - resistance_yay_probability;
+                    }
                 }
 
                 // Unnorm posterior
@@ -622,117 +602,291 @@ public class HeuristicAgent implements Agent{
             // Now that total Probability and unnormPosteriors are known
             for(int i = 0; i < suspicion.size(); ++i){
                 // Add posterior probability
-                // Do not let future priors be reset to 0.0 because not handling case where 2 spies on the same team
-                if(unnormPosteriors.get(i) != 0.0){
-                    suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+                suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
+            }
+            for(PBlock s : suspicion){
+                if(name.equals("A")){
+                    write(name + " says : Spyblock after get_Votes is " + s.composition + " has suspicion level " + s.suspicion);
                 }
             }
-        }
-        for(PBlock s : suspicion){
-            write("Spyblock after get_Traitors is " + s.composition + " has suspicion level " + s.suspicion);
-        }
-    }
-
-    /**
-     * Optional method to accuse other Agents of being spies.
-     * Default action should return the empty String.
-     * Convention suggests that this method only return a non-empty string when the accuser is sure that the accused is a spy.
-     * Of course convention can be ignored.
-     *
-     * @return a string containing the name of each accused agent, within 1 sec
-     */
-    @Override
-    public String do_Accuse() {
-        PBlock maxProbability = suspicion.get(0);
-        for(PBlock spyCombo : suspicion){
-            if(spyCombo.suspicion > maxProbability.suspicion){
-                maxProbability = spyCombo;
-            }
-        }
-        return maxProbability.composition;
-    }
-
-    /**
-     * Optional method to process an accusation.
-     *
-     * @param accuser the name of the agent making the accusation.
-     * @param accused the names of the Agents being Accused, concatenated in a String.
-     * return within 100ms
-     */
-    @Override
-    public void get_Accusation(String accuser, String accused) {
-    }
-
-    /**
-     * PBlock private class
-     *
-     * Holds the data of likelihood of the the group made up by the string present
-     */
-    private class PBlock implements Comparable<PBlock>{
-        private String composition;
-        private Double suspicion;
-
-        // PBLock Constructor
-        private PBlock(String composition, Double suspicion){
-            // Always sorted
-            this.composition = getSortedString(composition);
-            this.suspicion = suspicion;
+            write("\n");
         }
 
-        // Hashing for hash structures
+        /**
+         * Reports the agents being sent on a mission.
+         * Should be able to be inferred from tell_ProposedMission and tell_Votes, but included for completeness.
+         *
+         * @param mission the Agents being sent on a mission
+         * return within 100ms
+         **/
         @Override
-        public int hashCode(){
-            int hashComposition = (composition != null) ? composition.hashCode() : 0;
-            int hashSuspicion = (suspicion != null) ? suspicion.hashCode() : 0;
-            return (hashComposition + hashSuspicion)*hashSuspicion + hashComposition;
+        public void get_Mission(String mission) {
+            electedTeam = getSortedString(mission);
         }
 
-        // Boolean equals
-        public boolean equals(Object other){
-            if(other instanceof PBlock){
-                PBlock otherBlock = (PBlock)other;
-                // If strings are equal
-                if(this.composition != null && otherBlock.composition != null && this.composition.equals(otherBlock.composition)) {
-                    // return whether suspicion is equal
-                    return Objects.equals(this.suspicion, otherBlock.suspicion);
+        /**
+         * Agent chooses to betray or not.
+         *
+         * @return true if agent betrays, false otherwise, within 1 sec
+         **/
+        @Override
+        public boolean do_Betray() {
+            int spiesOnMission = characterIntersection(spies, electedTeam).length();
+            // As resistance member always want missions to succeed
+            if(!spy){
+                write(name + " did not betray>>>>>>>>>>>>>>>");
+                return false;
+            }
+
+            // Not enough spies - betrayal is pointless.
+            if (spiesOnMission < minSpiesRequired) {
+                write(name + " did not betray>>>>>>>>>>>>>>>");
+                return false;
+            }
+            // Perfect situaton: # of spies = # betrayals required, so all spies will betray.
+            else if (spiesOnMission == minSpiesRequired) {
+                write(name + " did betray>>>>>>>>>>>>>>>");
+                return true;
+            }
+            // Too many spies: we may need to worry about giving away spy identities via excess betrayals.
+            else {
+                // Mission failure would end the game: excess betrayals don't matter.
+                if (numFailures == 2) {
+                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    return true;
+                }
+                // The spies must fail all remaining missions to win the game, so betrayal is necessary.
+                if (missionNum - numFailures == 3) {
+                    // Gives away more information but pressured to betray to win
+                    // In a better modelled agent may have differnt voting strategies
+                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    return true;
+                }
+
+                // Co-ordination solutions.
+
+                // One betrayal required: leader betrays.
+                if (currLeader.equals(name) && minSpiesRequired == 1) {
+                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    return true;
+                }
+
+                // # betrayals required = # of non-leader spies: non-leaders betray.
+                if(!currLeader.equals(name) && (spiesOnMission - minSpiesRequired == 1) && spies.contains(currLeader)) {
+                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    return true;
                 }
             }
+            write(name + " did not betray>>>>>>>>>>>>>>>");
             return false;
         }
 
-        // ToString
-        public String toString(){
-            return "(" + composition + ", " + suspicion + ")";
-        }
-
-        // getters
-        public String getComposition(){
-            return composition;
-        }
-
-        public Double getSuspicion(){
-            return suspicion;
-        }
-
-        // setters
-        public void setComposition(String newComp){
-            // make sure all inputs are sorted
-            composition = getSortedString(newComp);
-        }
-
-        private void setSuspicion(Double newSuspicion){
-            suspicion = newSuspicion;
-        }
-
+        /**
+         * Reports the number of people who betrayed the mission
+         *
+         * @param traitors the number of people on the mission who chose to betray (0 for success, greater than 0 for failure)
+         * return within 100ms
+         **/
         @Override
-        public int compareTo(PBlock o) {
-            if(this.suspicion > o.suspicion){
-                return 1;
+        public void get_Traitors(int traitors) {
+            // Need to do Bayesian updates to improve suspicion whether 0 or greater than 0
+            Double prior;
+            Double likelihood;
+            Double unnormPos;
+            Double totalProbability = 0.0;
+            ArrayList<Double> unnormPosteriors = new ArrayList<>(suspicion.size());
+
+            String assumedSpiesInElectedTeam;
+            // Big assumption that traitors == spies and not resistance, hopefully implemented that Resistance
+            // never betrays
+
+            // If single traitor exists need to add suspicion for presence in team, regardless of win or not
+            // Doesn't win in Misison 4 of 7 player and higher games
+            // if(traitors > 0){
+
+            for(PBlock spyCombo : suspicion){
+                assumedSpiesInElectedTeam = characterIntersection(electedTeam, spyCombo.composition);
+                int numSpiesInTeam = assumedSpiesInElectedTeam.length();
+                // inherit last posterior
+                prior = spyCombo.suspicion;
+
+                // Safe to assume not to vote as voting to betrya gives up information
+                boolean leader_should_betray = false;
+                boolean non_leader_should_betray = false;
+
+                if (numSpiesInTeam < minSpiesRequired) {
+                    // Presumably no reason to vote to betray
+                    // However it's possible for a spy to betary when should not
+                    leader_should_betray = false;
+                    non_leader_should_betray = false;
+                }
+                else if (numSpiesInTeam == minSpiesRequired) {
+                    // Every reason to betray
+                    leader_should_betray = true;
+                    non_leader_should_betray = true;
+                }
+                else {
+                    //  Can just win now as have enough voting strength to win
+                    //  EZ GAME
+                    if (numFailures == 2) {
+                        leader_should_betray = true;
+                        non_leader_should_betray = true;
+                    }
+                    // foced failures expected
+                    else if (missionNum - numFailures == 3) {
+                        leader_should_betray = true;
+                        non_leader_should_betray = true;
+                    }
+                    // coordinated with non-leaders betraying when > 2 required
+                    // if only 1 then the leader should betray
+                    else if (spyCombo.composition.contains(currLeader)) {
+                        if (minSpiesRequired == 1) {
+                            leader_should_betray = true;
+                            non_leader_should_betray = false;
+                        } else if (assumedSpiesInElectedTeam.length() - minSpiesRequired == 1) {
+                            leader_should_betray = false;
+                            non_leader_should_betray = true;
+                        }
+                    }
+                }
+
+
+                // spy combination does not include the current leader
+                if (!spyCombo.composition.contains(currLeader)) {
+                    // probability that the non leader should betray = 95%, while the blunder case is 5% (when it does betray (unexpected)
+                    double p_betray = non_leader_should_betray ? 1.0 - BETRAYAL_BLUNDER : BETRAYAL_BLUNDER;
+                    // Binomial distribution (probability mass function)
+                    likelihood = Math.pow(p_betray, traitors) * Math.pow(1.0 - p_betray, numSpiesInTeam - traitors) * nChooseK(numSpiesInTeam, traitors);
+                } else {
+                    double p_leader_betrays = leader_should_betray ? 1.0 - BETRAYAL_BLUNDER : BETRAYAL_BLUNDER;
+                    double p_non_leader_betrays = non_leader_should_betray ? 1.0 - BETRAYAL_BLUNDER : BETRAYAL_BLUNDER;
+
+                    likelihood = 0.0;
+                    // Leader betrays, (traitors-1) non-leaders betray, (num_spies-traitors) non-leaders do not betray.
+                    likelihood += p_leader_betrays * Math.pow(p_non_leader_betrays, traitors - 1) * Math.pow(1.0 - p_non_leader_betrays, numSpiesInTeam - traitors) * nChooseK(numSpiesInTeam-1, traitors-1);
+                    // Leader does not betray, (traitors) non-leaders betray, (num_spies-traitors-1) non-leaders do not betray.
+                    likelihood += (1 - p_leader_betrays) * Math.pow(p_non_leader_betrays, traitors) * Math.pow(1.0 - p_non_leader_betrays, numSpiesInTeam - traitors - 1) * nChooseK(numSpiesInTeam-1, traitors);
+                }
+
+                // Unnorm posterior
+                unnormPos = prior * likelihood;
+                unnormPosteriors.add(unnormPos);
+                totalProbability += unnormPos;
             }
-            else if(this.suspicion < o.suspicion){
-                return -1;
+
+            // Now that total Probability and unnormPosteriors are known
+            for(int i = 0; i < suspicion.size(); ++i){
+                // Add posterior probability
+                suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
             }
-            return this.composition.compareTo(o.composition);
+            for(PBlock s : suspicion){
+                if(name.equals("A")){
+                    write(name + " says : Spyblock after get_Traitors is " + s.composition + " has suspicion level " + s.suspicion);
+                }
+            }
+            write("\n");
+        }
+
+        /**
+         * Optional method to accuse other Agents of being spies.
+         * Default action should return the empty String.
+         * Convention suggests that this method only return a non-empty string when the accuser is sure that the accused is a spy.
+         * Of course convention can be ignored.
+         *
+         * @return a string containing the name of each accused agent, within 1 sec
+         */
+        @Override
+        public String do_Accuse() {
+            PBlock maxProbability = suspicion.get(0);
+            for(PBlock spyCombo : suspicion){
+                if(spyCombo.suspicion > maxProbability.suspicion){
+                    maxProbability = spyCombo;
+                }
+            }
+            return maxProbability.composition;
+        }
+
+        /**
+         * Optional method to process an accusation.
+         *
+         * @param accuser the name of the agent making the accusation.
+         * @param accused the names of the Agents being Accused, concatenated in a String.
+         * return within 100ms
+         */
+        @Override
+        public void get_Accusation(String accuser, String accused) {
+        }
+
+        /**
+         * PBlock private class
+         *
+         * Holds the data of likelihood of the the group made up by the string present
+         */
+        private class PBlock implements Comparable<PBlock>{
+            private String composition;
+            private Double suspicion;
+
+            // PBLock Constructor
+            private PBlock(String composition, Double suspicion){
+                // Always sorted
+                this.composition = getSortedString(composition);
+                this.suspicion = suspicion;
+            }
+
+            // Hashing for hash structures
+            @Override
+            public int hashCode(){
+                int hashComposition = (composition != null) ? composition.hashCode() : 0;
+                int hashSuspicion = (suspicion != null) ? suspicion.hashCode() : 0;
+                return (hashComposition + hashSuspicion)*hashSuspicion + hashComposition;
+            }
+
+            // Boolean equals
+            public boolean equals(Object other){
+                if(other instanceof PBlock){
+                    PBlock otherBlock = (PBlock)other;
+                    // If strings are equal
+                    if(this.composition != null && otherBlock.composition != null && this.composition.equals(otherBlock.composition)) {
+                        // return whether suspicion is equal
+                        return Objects.equals(this.suspicion, otherBlock.suspicion);
+                    }
+                }
+                return false;
+            }
+
+            // ToString
+            public String toString(){
+                return "(" + composition + ", " + suspicion + ")";
+            }
+
+            // getters
+            public String getComposition(){
+                return composition;
+            }
+
+            public Double getSuspicion(){
+                return suspicion;
+            }
+
+            // setters
+            public void setComposition(String newComp){
+                // make sure all inputs are sorted
+                composition = getSortedString(newComp);
+            }
+
+            private void setSuspicion(Double newSuspicion){
+                suspicion = newSuspicion;
+            }
+
+            @Override
+            public int compareTo(PBlock o) {
+                if(this.suspicion > o.suspicion){
+                    return 1;
+                }
+                else if(this.suspicion < o.suspicion){
+                    return -1;
+                }
+                return this.composition.compareTo(o.composition);
+            }
         }
     }
-}

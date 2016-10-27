@@ -49,6 +49,7 @@ public class Game{
     spies = new HashSet<Character>();
     rand = new Random();
     long seed = rand.nextLong();
+    //long seed = 3926503860711154622l;
     rand.setSeed(seed);
     log("Seed: "+seed);
   }
