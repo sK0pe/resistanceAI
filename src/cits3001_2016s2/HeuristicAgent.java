@@ -1,3 +1,4 @@
+package cits3001_2016s2;
 import java.util.*;
 import java.io.*;
 
@@ -22,10 +23,10 @@ public class HeuristicAgent implements Agent{
     private int minSpiesRequired;
     private int numFailures;
 
-    private double RANDOM_PLAY = 0.1;
-    private double BETRAYAL_BLUNDER = 0.2;
-    private double RESISTANCE_YAY = 0.5;
-    private double VOTING_BLUNDER = 0.2;
+    private static double RANDOM_PLAY = 0.1;
+    private static double BETRAYAL_BLUNDER = 0.2;
+    private static double RESISTANCE_YAY = 0.5;
+    private static double VOTING_BLUNDER = 0.2;
 
     private String currProposedTeam;
     // Am I a spy?
@@ -267,7 +268,12 @@ public class HeuristicAgent implements Agent{
     /**
      * considerAllTeamsSuspicion
      *
-     * Alternate launcher to
+     * Secondary launcher when considering all teams with all players
+     * * Helper function to determine a possible team's suspicion level based on current probabilities
+     * @param allPossibleTeams      A container of all possible teams to consider, assumes all suspicion levels at 0.0.
+     * @param suspicionArr          A container that holds all suspicion, in most cases will be the global suspicion array.
+     *                              It does not include teams with "name" so 0.0 suspicion will be added when encountering
+     *                              teams with self.
      *
      **/
     private void considerAllTeamSuspicion(ArrayList<PBlock> allPossibleTeams, ArrayList<PBlock> suspicionArr){
@@ -282,7 +288,7 @@ public class HeuristicAgent implements Agent{
      * @param suspicionArr          A container that holds all suspicion, in most cases will be the global suspicion array.
      *                              It does not include teams with "name" so 0.0 suspicion will be added when encountering
      *                              teams with self.
-     * @personToExclude				A String which defines player to exclude from the Suspicion Array, if null, don't exclude
+     * @param personToExclude		A String which defines player to exclude from the Suspicion Array, if null, don't exclude
      * 								anyone
      *
      *
@@ -291,6 +297,7 @@ public class HeuristicAgent implements Agent{
         int possibleSpies;
         double normalisationFactor = 1.0;
 
+        // Exclude this person
         if (personToExclude != null) {
             normalisationFactor = 0.0;
             for(PBlock spyCombo : suspicionArr) {
@@ -300,8 +307,10 @@ public class HeuristicAgent implements Agent{
             }
         }
 
+        // For all possible teams, check all combinations of spies
         for(PBlock consideredTeam : allPossibleTeams) {
             for (PBlock spyCombo : suspicionArr) {
+                // Skip if excluding a player
                 if (personToExclude != null && spyCombo.composition.contains(personToExclude)) {
                     continue;
                 }
