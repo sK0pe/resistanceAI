@@ -1,4 +1,5 @@
-package cits3001_2016s2;
+package s21469477;
+import cits3001_2016s2.*;
 import java.util.*;
 import java.io.*;
 
@@ -22,6 +23,7 @@ public class HeuristicAgent implements Agent{
     private int numResistance;
     private int minSpiesRequired;
     private int numFailures;
+    private boolean statCheck = false;
 
     private static double RANDOM_PLAY = 0.1;
     private static double BETRAYAL_BLUNDER = 0.2;
@@ -109,7 +111,8 @@ public class HeuristicAgent implements Agent{
                 playerCombo.setLength(0);
                 playerCombo.append(playerArr[i]);
                 suspicion.add(new PBlock(playerCombo.toString(), 0.0));
-            } else {
+            }
+            else{
                 //groups >= 2
                 for (int j = i + 1; j < nPlayers; ++j) {
                     // groups of 2
@@ -117,21 +120,24 @@ public class HeuristicAgent implements Agent{
                         playerCombo.setLength(0);
                         playerCombo.append(playerArr[i]).append(playerArr[j]);
                         suspicion.add(new PBlock(playerCombo.toString(), 0.0));
-                    } else {
+                    }
+                    else{
                         // groups >= 3
                         for (int k = j + 1; k < nPlayers; ++k) {
                             if (groupSize == 3) {
                                 playerCombo.setLength(0);
                                 playerCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]);
                                 suspicion.add(new PBlock(playerCombo.toString(), 0.0));
-                            } else {
+                            }
+                            else{
                                 // group >= 4
                                 for (int l = k + 1; l < nPlayers; ++l) {
                                     if (groupSize == 4) {
                                         playerCombo.setLength(0);
                                         playerCombo.append(playerArr[i]).append(playerArr[j]).append(playerArr[k]).append(playerArr[l]);
                                         suspicion.add(new PBlock(playerCombo.toString(), 0.0));
-                                    } else {
+                                    }
+                                    else{
                                         // group of 5
                                         for (int m = l + 1; m < nPlayers; ++m) {
                                             playerCombo.setLength(0);
@@ -174,12 +180,7 @@ public class HeuristicAgent implements Agent{
             this.numResistance = numPlayers - numSpies;
 
             // If spy string contains my name, I'm a spy
-            if(spies.contains(name)){
-                this.spy = true;
-            }
-            else{
-                this.spy = false;
-            }
+            this.spy = spies.contains(name);
 
             // Initialise Suspicion for all possible combinations of spies
             // Specify all resistance Members based on knowledge
@@ -324,10 +325,12 @@ public class HeuristicAgent implements Agent{
             }
         }
 
-        for(PBlock consideredTeam : allPossibleTeams){
-            write(consideredTeam.composition + " has cumulative suspicion of " + consideredTeam.suspicion);
+        if(statCheck){
+            for(PBlock consideredTeam : allPossibleTeams){
+                write(consideredTeam.composition + " has cumulative suspicion of " + consideredTeam.suspicion);
+            }
+            write("\n");
         }
-        write("\n");
     }
 
 
@@ -379,18 +382,21 @@ public class HeuristicAgent implements Agent{
         if (!spy){
             // Fill all possible mission teams with suspicion (from my own perspective)
             considerAllTeamSuspicion(lowSuspicionTeam, suspicion, name);
-    } else {
+        }
+        else{
         // Fill all possible mission teams with suspicion (from an external perspective)
-        considerAllTeamSuspicion(lowSuspicionTeam, suspicion, null);
+            considerAllTeamSuspicion(lowSuspicionTeam, suspicion, null);
+        }
+        // Sort all possible mission teams, based on suspicion
+        Collections.sort(lowSuspicionTeam);
+        // Now have informed decision of providing best possible teams to go along with self as a leader (naive)
+        // Return least likely team to have a spy on it plus self
+        // As naive, works for Government spy and Resistance member
+        if(statCheck){
+            write(name + " is nominating the team " + lowSuspicionTeam.get(0).composition + ">>>>>>>>>>>>>>>");
+        }
+        return lowSuspicionTeam.get(0).composition;
     }
-    // Sort all possible mission teams, based on suspicion
-    Collections.sort(lowSuspicionTeam);
-    // Now have informed decision of providing best possible teams to go along with self as a leader (naive)
-    // Return least likely team to have a spy on it plus self
-    // As naive, works for Government spy and Resistance member
-    write(name + " is voting for " + lowSuspicionTeam.get(0).composition + ">>>>>>>>>>>>>>>");
-    return lowSuspicionTeam.get(0).composition;
-}
 
     /**
      * Provides information of a given mission.
@@ -448,12 +454,14 @@ public class HeuristicAgent implements Agent{
             suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
         }
 
-        for(PBlock s : suspicion){
-            if(name.equals("A")){
-                write(name + " says : Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
+        if(statCheck){
+            for(PBlock s : suspicion){
+                if(name.equals("A")){
+                    write(name + " says : Spyblock after get_ProposedMission is " + s.composition + " has suspicion level " + s.suspicion);
+                }
             }
+            write("\n");
         }
-        write("\n");
 
         if(!missionTeams.isEmpty()){
             missionTeams.clear();
@@ -462,7 +470,7 @@ public class HeuristicAgent implements Agent{
         // Get all possible player combinations.
         // Missions with self included will have lower suspicion as I'm definitely part of the
         // Resistance.
-        getPlayerCombinations(missionTeams, players, mission.length());
+        getPlayerCombinations(missionTeams, players, currProposedTeam.length());
         // Populate suspicion level of others
         considerAllTeamSuspicion(missionTeams, suspicion, name);
         // Sort the ArrayList by suspicion
@@ -500,19 +508,21 @@ public class HeuristicAgent implements Agent{
                 if (numFailures == 2) {
                     return true;
                 }
-                if (spies.contains(currLeader) && minSpiesRequired == 1) {
-                    // Only one betrayal required; the leader can betray safely.
-                    return true;
-                }
-                return false;
+                // Only one betrayal required; the leader can betray safely.
+                return (spies.contains(currLeader) && minSpiesRequired == 1);
             }
         }
         else{
             // missionTeams has been filled by the call to get_Proposed_Mission call earlier
-            double midRange = (missionTeams.get(0).suspicion + missionTeams.get(currProposedTeam.length() - 1).suspicion)/2.0;
+            double allSuspicion = 0.0;
+            for(PBlock m : missionTeams){
+                allSuspicion += m.suspicion;
+            }
+            double average = allSuspicion/(double)numPlayers;
+
             for(PBlock m : missionTeams){
                 if(m.composition.equals(currProposedTeam)){
-                    return (m.suspicion < midRange);
+                    return (m.suspicion < average);
                 }
             }
             return false;
@@ -546,7 +556,7 @@ public class HeuristicAgent implements Agent{
                 // Default false vote for spies
                 boolean spies_should_vote_yay = false;
                 // Resistance vote yay with preset probability.
-                // Resistance are aloow to change up their vote a split up by a factor of 0.5
+                // Resistance are alowed to change their vote split up by a factor of 0.5
                 double resistance_yay_probability = RESISTANCE_YAY;
 
                 // If it's the last proposal we assume the same likelihood regardless of the spy combo,
@@ -613,12 +623,14 @@ public class HeuristicAgent implements Agent{
                 // Add posterior probability
                 suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
             }
-            for(PBlock s : suspicion){
-                if(name.equals("A")){
-                    write(name + " says : Spyblock after get_Votes is " + s.composition + " has suspicion level " + s.suspicion);
+            if(statCheck){
+                for(PBlock s : suspicion){
+                    if(name.equals("A")){
+                        write(name + " says : Spyblock after get_Votes is " + s.composition + " has suspicion level " + s.suspicion);
+                    }
                 }
+                write("\n");
             }
-            write("\n");
         }
 
         /**
@@ -643,32 +655,32 @@ public class HeuristicAgent implements Agent{
             int spiesOnMission = characterIntersection(spies, electedTeam).length();
             // As resistance member always want missions to succeed
             if(!spy){
-                write(name + " did not betray>>>>>>>>>>>>>>>");
+                if(statCheck) write(name + " did not betray>>>>>>>>>>>>>>>");
                 return false;
             }
 
             // Not enough spies - betrayal is pointless.
             if (spiesOnMission < minSpiesRequired) {
-                write(name + " did not betray>>>>>>>>>>>>>>>");
+                if(statCheck) write(name + " did not betray>>>>>>>>>>>>>>>");
                 return false;
             }
             // Perfect situaton: # of spies = # betrayals required, so all spies will betray.
             else if (spiesOnMission == minSpiesRequired) {
-                write(name + " did betray>>>>>>>>>>>>>>>");
+                if(statCheck) write(name + " did betray>>>>>>>>>>>>>>>");
                 return true;
             }
             // Too many spies: we may need to worry about giving away spy identities via excess betrayals.
             else {
                 // Mission failure would end the game: excess betrayals don't matter.
                 if (numFailures == 2) {
-                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    if(statCheck) write(name + " did betray>>>>>>>>>>>>>>>");
                     return true;
                 }
                 // The spies must fail all remaining missions to win the game, so betrayal is necessary.
                 if (missionNum - numFailures == 3) {
                     // Gives away more information but pressured to betray to win
                     // In a better modelled agent may have differnt voting strategies
-                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    if(statCheck) write(name + " did betray>>>>>>>>>>>>>>>");
                     return true;
                 }
 
@@ -676,17 +688,17 @@ public class HeuristicAgent implements Agent{
 
                 // One betrayal required: leader betrays.
                 if (currLeader.equals(name) && minSpiesRequired == 1) {
-                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    if(statCheck) write(name + " did betray>>>>>>>>>>>>>>>");
                     return true;
                 }
 
                 // # betrayals required = # of non-leader spies: non-leaders betray.
                 if(!currLeader.equals(name) && (spiesOnMission - minSpiesRequired == 1) && spies.contains(currLeader)) {
-                    write(name + " did betray>>>>>>>>>>>>>>>");
+                    if(statCheck) write(name + " did betray>>>>>>>>>>>>>>>");
                     return true;
                 }
             }
-            write(name + " did not betray>>>>>>>>>>>>>>>");
+            if(statCheck) write(name + " did not betray>>>>>>>>>>>>>>>");
             return false;
         }
 
@@ -752,7 +764,8 @@ public class HeuristicAgent implements Agent{
                         if (minSpiesRequired == 1) {
                             leader_should_betray = true;
                             non_leader_should_betray = false;
-                        } else if (assumedSpiesInElectedTeam.length() - minSpiesRequired == 1) {
+                        }
+                        else if (assumedSpiesInElectedTeam.length() - minSpiesRequired == 1) {
                             leader_should_betray = false;
                             non_leader_should_betray = true;
                         }
@@ -766,7 +779,8 @@ public class HeuristicAgent implements Agent{
                     double p_betray = non_leader_should_betray ? 1.0 - BETRAYAL_BLUNDER : BETRAYAL_BLUNDER;
                     // Binomial distribution (probability mass function)
                     likelihood = Math.pow(p_betray, traitors) * Math.pow(1.0 - p_betray, numSpiesInTeam - traitors) * nChooseK(numSpiesInTeam, traitors);
-                } else {
+                }
+                else{
                     double p_leader_betrays = leader_should_betray ? 1.0 - BETRAYAL_BLUNDER : BETRAYAL_BLUNDER;
                     double p_non_leader_betrays = non_leader_should_betray ? 1.0 - BETRAYAL_BLUNDER : BETRAYAL_BLUNDER;
 
@@ -788,12 +802,14 @@ public class HeuristicAgent implements Agent{
                 // Add posterior probability
                 suspicion.get(i).suspicion = unnormPosteriors.get(i)/totalProbability;
             }
-            for(PBlock s : suspicion){
-                if(name.equals("A")){
-                    write(name + " says : Spyblock after get_Traitors is " + s.composition + " has suspicion level " + s.suspicion);
+            if(statCheck){
+                for(PBlock s : suspicion){
+                    if(name.equals("A")){
+                        write(name + " says : Spyblock after get_Traitors is " + s.composition + " has suspicion level " + s.suspicion);
+                    }
                 }
+                write("\n");
             }
-            write("\n");
         }
 
         /**
@@ -808,7 +824,7 @@ public class HeuristicAgent implements Agent{
         public String do_Accuse() {
             PBlock maxProbability = suspicion.get(0);
             for(PBlock spyCombo : suspicion){
-                if(spyCombo.suspicion > maxProbability.suspicion){
+                if(spyCombo.suspicion > maxProbability.suspicion && !spyCombo.composition.contains(name)){
                     maxProbability = spyCombo;
                 }
             }
